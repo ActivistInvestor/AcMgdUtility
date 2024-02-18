@@ -32,7 +32,8 @@ namespace Autodesk.AutoCAD.Runtime
    /// initialization at startup, and optionally, override the 
    /// Terminate() method to do finalization tasks at shutdown.
    /// 
-   /// See the example derived MyApplication class included below.
+   /// See the example derived MyApplication class included 
+   /// in the file MyApplication.cs.
    /// </summary>
 
    public abstract class ExtensionApplicationAsync : IExtensionApplication
