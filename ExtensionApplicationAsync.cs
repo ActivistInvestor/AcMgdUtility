@@ -40,7 +40,7 @@ namespace Autodesk.AutoCAD.Runtime
    {
       void IExtensionApplication.Initialize()
       {
-         this.Initialize();
+         Application.Idle += OnIdle;
       }
 
       protected abstract void Initialize();
