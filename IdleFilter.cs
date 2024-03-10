@@ -68,7 +68,7 @@ namespace Autodesk.AutoCAD.ApplicationServices
                   Application.Idle -= idle;
                }
                enabled = value;
-               SetEnabled(value);
+               OnEnabledChanged(value);
             }
          }
       }
@@ -80,7 +80,7 @@ namespace Autodesk.AutoCAD.ApplicationServices
       /// <param name="value">a value indicating if the
       /// instance is being enabled or disabled</param>
 
-      protected virtual void SetEnabled(bool value)
+      protected virtual void OnEnabledChanged(bool value)
       {
       }
 
