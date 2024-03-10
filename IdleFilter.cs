@@ -5,7 +5,7 @@
 /// Distributed under the MIT license.
 /// 
 /// <summary>
-/// This class is designed to filters AutoCAD's
+/// This class is designed to 'filter' AutoCAD's
 /// Application.Idle events both by frequency and
 /// by the quiescent state of the drawing editor.
 /// 
