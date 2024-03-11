@@ -1,7 +1,7 @@
 ﻿using System;
 
 /// IdleFilter.cs  
-/// ActivistInvestor / Tony Tanzillo
+/// ActivistInvestor / TT
 /// Distributed under the MIT license.
 /// 
 /// <summary>
@@ -24,7 +24,7 @@ namespace Autodesk.AutoCAD.ApplicationServices
       bool enabled = false;
       DateTime last = DateTime.MinValue;
 
-      /// <param name="duration">The minimum freqency at which
+      /// <param name="duration">The minimum frequency at which
       /// idle notifications are sent</param>
       /// <param name="quiescent">Specifies if the idle
       /// notification can/cannot be sent when the drawing
@@ -119,7 +119,10 @@ namespace Autodesk.AutoCAD.ApplicationServices
       /// 
       /// If this is true, notifications are deferred until the
       /// editor is in a quiescent state, or there is no active 
-      /// document.
+      /// document. Note that the active document may not be the
+      /// same between the point when the source idle event is 
+      /// raised and the point when a deferred notification is 
+      /// sent.
       /// </summary>
 
       public bool Quiescent { get; set; }
@@ -182,18 +185,24 @@ namespace Autodesk.AutoCAD.ApplicationServices
 
       public void Dispose()
       {
-         this.Dispose(true);
+         Dispose(true);
+         GC.SuppressFinalize(this);
       }
 
       protected virtual void Dispose(bool disposing)
       {
          Enabled = false;
       }
+
+      ~IdleFilter()
+      {
+         Dispose(false);
+      }
    }
 
    /// <summary>
    /// Exposes the functionality of the IdleFilter to 
-   /// consumers by allowing them to supply an fuction 
+   /// consumers by allowing them to supply a fuction 
    /// to handle notifications.
    /// </summary>
 
@@ -220,7 +229,7 @@ namespace Autodesk.AutoCAD.ApplicationServices
       /// action is null</exception>
 
       public IdleAction(Func<TimeSpan, bool> action, 
-            TimeSpan duration, 
+            TimeSpan duration = default(TimeSpan), 
             bool quiescent = true, 
             bool disabled = false)
          : base(duration, quiescent, disabled)
@@ -253,22 +262,22 @@ namespace Autodesk.AutoCAD.ApplicationServices
       /// <param name="action">The action to be invoked</param>
       /// <param name="quiescent">True to wait until the editor 
       /// is quiescent (default = true)</param>
-      /// <param name="delay">Minimum number of milliseconds to 
-      /// wait before invoking the action. The default invokes 
-      /// the action immediately on the next raising of the
-      /// Idle event, without delay.</param>
+      /// <param name="duration">Minimum number of milliseconds 
+      /// to wait before invoking the action. The default is to
+      /// invoke the action immediately on the next raising of 
+      /// the Idle event without delay.</param>
 
       public static void OnNextIdle(Action action, 
          bool quiescent = true,
-         long delay = 0L)
+         long duration = 0L)
       {
          if(action == null)
             throw new ArgumentNullException(nameof(action));
-         using(new IdleAction((unused) =>
+         using(new IdleAction(delegate(TimeSpan unused)
          {
             action();
             return false;
-         }, TimeSpan.FromMilliseconds(delay), quiescent)) ;
+         }, TimeSpan.FromMilliseconds(duration), quiescent));
       }
    }
 
@@ -297,18 +306,17 @@ namespace Autodesk.AutoCAD.ApplicationServices
       /// further notifications are not desired.
       /// </summary>
 
-      public bool Enabled { get; private set; }
+      public bool Enabled { get; set; }
    }
 
    public delegate void IdleEventHandler(object sender, IdleEventArgs e);
-
 
    /// <summary>
    /// Exposes the functionality of the base type to 
    /// consumers through an event.
    /// 
    /// See the included IdleEventObserverExample.cs for 
-   /// an examnple showing how to consume this class.
+   /// examnples showing how to consume this class.
    /// </summary>
 
    public class IdleEventFilter : IdleFilter
@@ -350,6 +358,9 @@ namespace Autodesk.AutoCAD.ApplicationServices
       /// 
       /// Hence, it isn't necessary to manipulate the Enabled property
       /// manually when adding or removing handlers from the event.
+      /// 
+      /// A handler of this event can disable subsequent notifications
+      /// by setting the Enabled property of the event args to false.
       /// </remarks>
 
       public event IdleEventHandler Idle
