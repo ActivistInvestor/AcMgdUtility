@@ -1,4 +1,6 @@
 ﻿using System;
+using System.Collections;
+using System.Collections.Generic;
 
 /// IdleFilter.cs  
 /// ActivistInvestor / TT
@@ -6,8 +8,22 @@
 /// 
 /// <summary>
 /// This class is designed to 'filter' AutoCAD's
-/// Application.Idle events both by frequency and
-/// by the quiescent state of the drawing editor.
+/// Application.Idle events both by frequency, the
+/// the quiescent state of the drawing editor, and
+/// if there is an active document. 
+/// 
+/// The notification exposed by this class will be
+/// deferred until the following conditions are met:
+/// 
+///   1. The DocumentRequired property is false, or
+///      there is an active document in the editor.
+///      
+///   2. The Quiescent property is false, or the
+///      editor is in a quiescent state.
+///    
+///   3. The amount of time elapsed since the point 
+///      when the last notification was sent is less 
+///      than the value of the Frequency property.
 /// 
 /// This base type is used by two concrete derived
 /// types included below. Use either of those to
@@ -20,28 +36,37 @@ namespace Autodesk.AutoCAD.ApplicationServices
 {
    public abstract class IdleFilter : IDisposable
    {
-      TimeSpan duration;
+      TimeSpan frequency;
       bool enabled = false;
+      bool notifying = false;
+      bool documentRequired = true;
       DateTime last = DateTime.MinValue;
 
-      /// <param name="duration">The minimum frequency at which
+      /// <param name="frequency">The minimum frequency at which
       /// idle notifications are sent</param>
       /// <param name="quiescent">Specifies if the idle
       /// notification can/cannot be sent when the drawing
       /// editor is in a quiescent state (default = true)</param>
       /// <param name="disabled">Specifies the initial enabled
       /// state of the instance (default is enabled).</param>
+      /// <param name="document">Specifies if notifications
+      /// can only be sent when there is an active document 
+      /// (default = true)</param>
       /// <remarks>
       /// This type implements IDisposable, which allows it to
       /// disable itself when it is no-longer needed. An enabled 
       /// instance is always disabled when it is disposed.
       /// </remarks>
 
-      public IdleFilter(TimeSpan duration, bool quiescent = true, bool disabled = false)
+      public IdleFilter(TimeSpan frequency, 
+         bool quiescent = true, 
+         bool disabled = false,
+         bool document = true)
       {
-         this.duration = duration;
+         this.frequency = frequency;
          this.Quiescent = quiescent;
          this.Enabled = !disabled;
+         this.documentRequired = document;
       }
 
       /// <summary>
@@ -68,7 +93,7 @@ namespace Autodesk.AutoCAD.ApplicationServices
                   Application.Idle -= idle;
                }
                enabled = value;
-               OnEnabledChanged(value);
+               OnEnabledChanged(enabled);
             }
          }
       }
@@ -80,7 +105,7 @@ namespace Autodesk.AutoCAD.ApplicationServices
       /// <param name="value">a value indicating if the
       /// instance is being enabled or disabled</param>
 
-      protected virtual void OnEnabledChanged(bool value)
+      protected virtual void OnEnabledChanged(bool enabled)
       {
       }
 
@@ -91,21 +116,37 @@ namespace Autodesk.AutoCAD.ApplicationServices
       /// notifications by frequency, specify TimeSpan.Zero.
       /// </summary>
 
-      public TimeSpan Duration
+      public TimeSpan Frequency
       {
          get
          {
-            return duration;
+            return frequency;
          }
          set
          {
-            duration = value;
+            frequency = value;
             last = DateTime.Now;
          }
       }
 
       /// <summary>
-      /// Resets the internal timer to the specified duration,
+      /// Specifies that notifications are deferred if
+      /// there is no active document in the editor. 
+      /// If this value true, notifications will be
+      /// deferred until there is an active document
+      /// in the editor. If this property is false,
+      /// notifications are not deferred regardless of
+      /// if there's an active document or not.
+      /// </summary>
+
+      public bool DocumentRequired 
+      {
+         get => documentRequired;
+         set => documentRequired = value;
+      }
+
+      /// <summary>
+      /// Resets the internal timer to the specified frequency.
       /// </summary>
 
       public void Reset()
@@ -134,12 +175,12 @@ namespace Autodesk.AutoCAD.ApplicationServices
       /// Custom types derived from this class can override
       /// this to handle the notification.
       /// </summary>
-      /// <param name="duration">The amount of time that has 
+      /// <param name="frequency">The amount of time that has 
       /// elapsed since this method was last invoked.</param>
       /// <returns>A value indicating if the instance should
       /// be enabled</returns>
 
-      protected virtual bool OnIdle(TimeSpan duration)
+      protected virtual bool OnIdle(TimeSpan frequency)
       {
          return true;
       }
@@ -154,7 +195,8 @@ namespace Autodesk.AutoCAD.ApplicationServices
       {
          get
          {
-            return enabled && Application.DocumentManager.MdiActiveDocument != null
+            return enabled && ! notifying 
+               && (!documentRequired || Application.DocumentManager.MdiActiveDocument != null)
                && !Quiescent || IsQuiescent;
          }
       }
@@ -164,10 +206,20 @@ namespace Autodesk.AutoCAD.ApplicationServices
          if(CanInvoke)
          {
             var elapsed = DateTime.Now - last;
-            if(elapsed > duration)
+            if(elapsed > frequency)
             {
-               this.Enabled = OnIdle(elapsed);
-               last = DateTime.Now;
+               notifying = true;
+               bool flag = false;
+               try
+               {
+                  flag = OnIdle(elapsed);
+                  last = DateTime.Now;
+               }
+               finally
+               {
+                  this.Enabled = flag;
+                  notifying = false;
+               }
             }
          }
       }
@@ -202,14 +254,13 @@ namespace Autodesk.AutoCAD.ApplicationServices
 
    /// <summary>
    /// Exposes the functionality of the IdleFilter to 
-   /// consumers by allowing them to supply a fuction 
+   /// consumers by allowing them to supply a delegate
    /// to handle notifications.
    /// </summary>
 
    public class IdleAction : IdleFilter
    {
       Func<TimeSpan, bool> handler;
-      bool single;
 
       /// <summary>
       /// Creates an instance with the specified parameters
@@ -217,7 +268,7 @@ namespace Autodesk.AutoCAD.ApplicationServices
       /// <param name="action">A function that takes
       /// a TimeSpan, and returns a bool indicating
       /// if further notifications are to be sent</param>
-      /// <param name="duration">The minimum amount of
+      /// <param name="frequency">The minimum amount of
       /// time that must elapse since the most-recent
       /// notification</param>
       /// <param name="quiescent">A value indicating if
@@ -225,24 +276,27 @@ namespace Autodesk.AutoCAD.ApplicationServices
       /// editor is in a quiescent state</param>
       /// <param name="disabled">A value indicating if
       /// the instance is disabled by default (false).</param>
+      /// <param name="document">A value indicating if
+      /// notifications should only be sent if there is
+      /// an active document. Default = true</param>
       /// <exception cref="ArgumentNullException">The
       /// action is null</exception>
 
       public IdleAction(Func<TimeSpan, bool> action, 
-            TimeSpan duration = default(TimeSpan), 
-            bool quiescent = true, 
-            bool disabled = false)
-         : base(duration, quiescent, disabled)
+         TimeSpan frequency = default(TimeSpan), 
+         bool quiescent = true, 
+         bool disabled = false,
+         bool document = true) : base(frequency, quiescent, disabled, document)
       {
          if(action == null)
             throw new ArgumentNullException(nameof(action));
          this.handler = action;
       }
 
-      protected override bool OnIdle(TimeSpan duration)
+      protected override bool OnIdle(TimeSpan frequency)
       {
-         base.OnIdle(duration);
-         return handler(duration);
+         base.OnIdle(frequency);
+         return handler(frequency);
       }
 
       /// <summary>
@@ -262,14 +316,14 @@ namespace Autodesk.AutoCAD.ApplicationServices
       /// <param name="action">The action to be invoked</param>
       /// <param name="quiescent">True to wait until the editor 
       /// is quiescent (default = true)</param>
-      /// <param name="duration">Minimum number of milliseconds 
+      /// <param name="delay">Minimum number of milliseconds 
       /// to wait before invoking the action. The default is to
       /// invoke the action immediately on the next raising of 
       /// the Idle event without delay.</param>
 
       public static void OnNextIdle(Action action, 
          bool quiescent = true,
-         long duration = 0L)
+         long delay = 0L)
       {
          if(action == null)
             throw new ArgumentNullException(nameof(action));
@@ -277,7 +331,7 @@ namespace Autodesk.AutoCAD.ApplicationServices
          {
             action();
             return false;
-         }, TimeSpan.FromMilliseconds(duration), quiescent));
+         }, TimeSpan.FromMilliseconds(delay), quiescent, false, true));
       }
    }
 
@@ -302,7 +356,7 @@ namespace Autodesk.AutoCAD.ApplicationServices
       /// notifications are sent unless the Enabled
       /// property of the sender is subseqently set 
       /// to true. The value of this property will
-      /// always be true, but can be set to false if 
+      /// always be true but can be set to false if 
       /// further notifications are not desired.
       /// </summary>
 
@@ -324,16 +378,17 @@ namespace Autodesk.AutoCAD.ApplicationServices
       event IdleEventHandler idle;
 
       /// <summary>
-      /// Creates a new instance.
+      /// Creates a new instance that is disabled until a
+      /// handler is added to the Idle event.
       /// </summary>
-      /// <param name="duration">The minimum freqency at which
+      /// <param name="frequency">The minimum freqency at which
       /// idle notifications are sent</param>
       /// <param name="quiescent">Specifies if the idle
       /// notification can/cannot be sent when the editor
       /// is in a quiescent state (default = true)</param>
 
-      public IdleEventFilter(TimeSpan duration, bool quiescent = true)
-         : base(duration, quiescent, true)
+      public IdleEventFilter(TimeSpan frequency, bool quiescent = true)
+         : base(frequency, quiescent, true)
       {
       }
 
@@ -353,11 +408,15 @@ namespace Autodesk.AutoCAD.ApplicationServices
       /// <remarks>
       /// The instance is automatically enabled or disabled based on
       /// if there are any handlers attached to this event. When the
-      /// first handler is added, the instance becomes enabled. When
-      /// the last handler is removed, the instance becomes disabled.
+      /// first handler is added, the instance becomes enabled and
+      /// begins listening to the Application's Idle event. When the
+      /// last handler is removed, the instance becomes disabled and
+      /// no longer listens to the Application's Idle event.
       /// 
       /// Hence, it isn't necessary to manipulate the Enabled property
-      /// manually when adding or removing handlers from the event.
+      /// manually when adding or removing handlers from the event. The
+      /// Enabled property can be set to False when there is a handler
+      /// in specialized use cases, however.
       /// 
       /// A handler of this event can disable subsequent notifications
       /// by setting the Enabled property of the event args to false.
@@ -379,7 +438,6 @@ namespace Autodesk.AutoCAD.ApplicationServices
 
       protected sealed override bool OnIdle(TimeSpan elapsed)
       {
-         base.OnIdle(elapsed);
          if(idle != null)
          {
             var args = new IdleEventArgs(elapsed);
@@ -388,6 +446,56 @@ namespace Autodesk.AutoCAD.ApplicationServices
          }
          return false;
       }
+
+      /// <summary>
+      /// The following types are used by specializations of
+      /// IdleFilter that are not included in this distribution.
+      /// The main reason for this is due to the possiblity that
+      /// the type T could expose references to objects that are
+      /// no longer in-scope or usable.
+      /// </summary>
+
+      public delegate void IdleEventHandler<T>(object sender, IdleEventArgs<T> e) where T : EventArgs;
+      public class EventQueue<T> : Queue<IdleEventHandler<T>> where T:EventArgs { }
+     
+      public class IdleEventArgs<T> : IdleEventArgs where T:EventArgs
+      {
+         T sourceEventArgs;
+         WeakReference<Object> sender;
+
+         public IdleEventArgs(object sender, T sourceEventArgs, TimeSpan duration) : base(duration)
+         {
+            this.sourceEventArgs = sourceEventArgs;
+            this.sender = new WeakReference<object>(sender);
+         }
+
+         public bool IsSenderAlive 
+         { 
+            get
+            {
+               return sender.TryGetTarget(out _);
+            }
+         }
+
+         public object Sender 
+         {
+            get
+            {
+               if(sender.TryGetTarget(out var obj))
+                  return obj;
+               else
+                  return null;
+            }
+            private set 
+            { 
+               this.sender = new WeakReference<object>(sender); 
+            }
+         }
+
+         public T SourceEventArgs { get; private set; }
+      }
+
+
    }
 }
 
