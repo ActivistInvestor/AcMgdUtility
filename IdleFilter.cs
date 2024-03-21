@@ -22,7 +22,7 @@ using System.Collections.Generic;
 ///      editor is in a quiescent state.
 ///    
 ///   3. The amount of time elapsed since the point 
-///      when the last notification was sent is less 
+///      when the last notification was sent is greater 
 ///      than the value of the Frequency property.
 /// 
 /// This base type is used by two concrete derived
