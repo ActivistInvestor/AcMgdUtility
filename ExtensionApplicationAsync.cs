@@ -24,6 +24,10 @@ namespace Autodesk.AutoCAD.Runtime
    ///      exceptions that occur in the Initialize() method
    ///      of IExtensionApplication.
    ///
+   ///   3. Instanciates a field with the active Document so
+   ///      that it can be used in the Initialize method of the
+   ///      derived class.
+   ///
    /// Usage:
    ///
    /// This class should not be altered. Just include it in 
@@ -48,9 +52,12 @@ namespace Autodesk.AutoCAD.Runtime
       {
       }
 
+      protected Document doc;
+
       void OnIdle(object sender, EventArgs e)
       {
-         if(Application.DocumentManager.MdiActiveDocument != null)
+         Document doc = Application.DocumentManager.MdiActiveDocument;
+         if (doc != null)
          {
             Application.Idle -= OnIdle;
             try
