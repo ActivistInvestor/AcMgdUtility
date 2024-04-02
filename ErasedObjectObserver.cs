@@ -163,7 +163,7 @@ namespace CommandObserverExamplePattern
 
       private void idle(object? sender, EventArgs e)
       {
-         if(Application.DocumentManager.MdiActiveDocument == null)
+         if(Application.DocumentManager.MdiActiveDocument != null)
          {
             Application.Idle -= idle;
             ErasedObjectObserver<BlockReference>.Initialize();
