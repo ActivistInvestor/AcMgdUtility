@@ -9,9 +9,9 @@ using Autodesk.AutoCAD.Runtime;
 using Autodesk.AutoCAD.Runtime.AIUtils;
 using Autodesk.Windows;
 
-[assembly: ExtensionApplication(typeof(MyRibbonExtensionApplication))]
+[assembly: ExtensionApplication(typeof(Example.MyRibbonExtensionApplication))]
 
-namespace Autodesk.AutoCAD.Runtime.AIUtils
+namespace Example
 {
    public class MyRibbonExtensionApplication : RibbonExtensionApplication
    {
