@@ -490,6 +490,38 @@ namespace Autodesk.AutoCAD.ApplicationServices
       }
 
       /// <summary>
+      /// Inserts a sequence of TypedValues immediately after
+      /// the last existing element having the specified code.
+      /// </summary>
+
+      public static void InsertAfterLast(this List<TypedValue> list, 
+         short code, IEnumerable<TypedValue> values)
+      {
+         int last = IndexOfLast(list, code);
+         if(last > -1)
+            list.InsertRange(last + 1, values);
+         else
+            throw new InvalidOperationException("item not found");
+      }
+
+      /// <summary>
+      /// Inserts a sequence of TypedValues all having the same
+      /// specified typeCode, and each having one of the specified 
+      /// values, immediately after the last existing element 
+      /// having the specified code.
+      /// </summary>
+
+      public static void InsertAfterLast<T>(this List<TypedValue> list,
+         short code, short typeCode, IEnumerable<T> values)
+      {
+         int last = IndexOfLast(list, code);
+         if(last > -1)
+            list.InsertRange(last + 1, values.Select(v => new TypedValue(typeCode, v)));
+         else
+            throw new InvalidOperationException("item not found");
+      }
+
+      /// <summary>
       /// Returns a sequence of the values of all
       /// elements having the given type code.
       /// 
