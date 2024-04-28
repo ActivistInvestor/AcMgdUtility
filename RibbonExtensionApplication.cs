@@ -4,8 +4,11 @@
 /// A specialization of ExtensionApplicationAsync
 /// that provides a simplified means of initializing
 /// and/or adding content to AutoCAD's ribbon UI.
+/// 
+/// Prerequisites: ExtensionApplicationAsync.cs
 
 using System;
+using Autodesk.AutoCAD.ApplicationServices;
 using Autodesk.AutoCAD.Ribbon;
 using Autodesk.Windows;
 
@@ -81,20 +84,39 @@ using Autodesk.Windows;
 
 namespace Autodesk.AutoCAD.Runtime.AIUtils
 {
-   public abstract class RibbonExtensionApplication 
-      : ExtensionApplicationAsync
+   public abstract class RibbonExtensionApplication : IExtensionApplication
    {
+
+      /// <summary>
+      /// Must override this method, and perform one-time
+      /// initialization tasks that do not have a depenence
+      /// on the ribbon.
+      /// </summary>
+      
+      protected abstract void Initialize();
+
+      /// <summary>
+      /// Optionally, override this to perform cleanup
+      /// tasks at shutdown.
+      /// </summary>
+
+      protected virtual void Terminate()
+      {
+      }
+
       /// <summary>
       /// InitializeRibbon() method
       /// 
       /// When overridden in a derived type, this method 
-      /// will be called at startup if the ribbon exists at 
-      /// that point. Otherwise, the method will be called
-      /// if/when the ribbon is created. If the ribbon is
-      /// currently hidden at startup, this method will only
-      /// be called if the ribbon is subsequently shown, and
-      /// may never be called if the user never activates the
-      /// ribbon during the current AutoCAD session.
+      /// is called at the point where an existing ribbon 
+      /// is found, or at some later point when the ribbon
+      /// is created (which may never happen), this method
+      /// will also be called (possibly many times) when a
+      /// workspace is loaded.
+      /// 
+      /// Regardless of how/when the method is called, the 
+      /// override should add application-provided content 
+      /// to the ribbon in this method.
       /// 
       /// The context argument indicates the context in which
       /// the method is called, which can be for one of three 
@@ -102,21 +124,20 @@ namespace Autodesk.AutoCAD.Runtime.AIUtils
       /// 
       ///   Active:  
       ///   
-      ///     The ribbon already exists and Application-
-      ///     provided content must be added to it. 
+      ///     The ribbon exists and application-provided 
+      ///     content should be added to it. 
       ///     
       ///     This is typically the context when applications 
-      ///     are first loaded at startup; when the NETLOAD 
-      ///     command is used; or when the application is 
-      ///     demand-loaded because one of its commands was
-      ///     issued.
+      ///     are loaded at startup; when the NETLOAD command 
+      ///     is used; or when the application is demand-loaded 
+      ///     because one of its commands was issued.
       ///              
       ///   Initalizing:   
       ///   
-      ///     The ribbon was just created and Application-
-      ///     provided content must be added to it. This is
+      ///     The ribbon was just created, and application-
+      ///     provided content should be added to it. This is
       ///     the context that is passed when the ribbon does
-      ///     not exist at startup and is subsequently shown
+      ///     not exist at startup and is subsequently created
       ///     at some point in the AutoCAD session as a result 
       ///     of the user issuing the RIBBON command.
       ///              
@@ -128,56 +149,85 @@ namespace Autodesk.AutoCAD.Runtime.AIUtils
       ///     provided content to be added to the ribbon again.
       ///
       /// Applications must override this method to add their
-      /// content to the ribbon. The override should first check 
-      /// to see if the content it adds to the ribbon is already 
-      /// added or not and act only if the content is not present, 
-      /// as there is no guarantee that this method will only be 
-      /// called if the ribbon content has not already been added
-      /// to the ribbon.
+      /// content to the ribbon. 
       /// 
       /// This method may be called any number of times during 
       /// an AutoCAD session, with the context argument set to 
-      /// RibbonContext.WorkspaceLoaded.
+      /// RibbonContext.WorkspaceLoaded. In every case, content
+      /// should be added to the ribbon because previously-added
+      /// content is discarded when a workspace is loaded.
       /// 
       /// Remarks: 
       ///
-      /// This method should not be used to perform various
-      /// other application initialization tasks, because it
-      /// may never be called (e.g., the ribbon is not visible
-      /// at startup and is never used in the AutoCAD session).
+      /// This method should not be used to perform other types
+      /// of application initialization tasks unrelated to the
+      /// ribbon, because this method may never be called (for
+      /// example, the ribbon is not visible at startup and is 
+      /// never made visible for the life of the AutoCAD session).
       /// 
-      /// The Initialize() method must be overriden to perform
-      /// various other application initialization tasks. The
-      /// Initialize() method is always called when an extension
-      /// is loaded and is called before InitializeRibbon() is
-      /// called. Hence, the Initialize() method can not have
-      /// any depenence on the ribbon.
+      /// The Initialize() method should be used to perform other
+      /// application initialization tasks. That method is always
+      /// called when an extension is loaded, and is called before 
+      /// InitializeRibbon() is called. Hence, the Initialize() 
+      /// method should not have any depenence on the ribbon.
       /// 
-      /// It is highly-recommended that ribbon context be
-      /// created only once and stored in memory, so that
-      /// the same content can be added to the ribbon each 
-      /// time this method is called.
+      /// It is highly-recommended that ribbon context be created 
+      /// only once and cached in memory, so that the same content 
+      /// can be added to the ribbon again, each time this method 
+      /// is called.
       /// </summary>
 
       protected abstract void InitializeRibbon(RibbonControl ribbon, RibbonState context);
 
-      /// All remaining code supports the above method and need 
-      /// not be modified.
+      /// <summary>
+      /// For advanced or specialized use cases:
+      /// 
+      /// Override this and return true if initialization
+      /// should be deferred until the editor is quiescent.
+      /// </summary>
+
+      protected virtual bool Quiescent => false;
+
+      /// All code below this point is supporting
+      /// code that should not have to be modified.
+
+      void IExtensionApplication.Initialize()
+      {
+         Application.Idle += OnIdle;
+      }
+
+      void OnIdle(object sender, EventArgs e)
+      {
+         if(Document != null && ! Quiescent || Document.Editor.IsQuiescent)
+         {
+            Application.Idle -= OnIdle;
+            try
+            {
+               this.Initialize();
+               if(RibbonPaletteSet != null)
+                  initializeRibbon(RibbonState.Active);
+               else
+                  RibbonServices.RibbonPaletteSetCreated += ribbonCreated;
+            }
+            catch(System.Exception ex)
+            {
+               Console.Beep();
+               Document.Editor.WriteMessage(ex.ToString());
+            }
+         }
+      }
+
+      void IExtensionApplication.Terminate()
+      {
+         this.Terminate();
+      }
 
       void initializeRibbon(RibbonState context)
       {
          if(RibbonPaletteSet == null || RibbonControl == null)
-            throw new InvalidOperationException("RibbonPalleteSet does not exist");
+            throw new InvalidOperationException("Ribbon does not exist");
          InitializeRibbon(RibbonControl, context);
          RibbonPaletteSet.WorkspaceLoaded += workspaceLoaded;
-      }
-
-      protected sealed override void OnInitalize()
-      {
-         if(RibbonPaletteSet != null)
-            initializeRibbon(RibbonState.Active);
-         else
-            RibbonServices.RibbonPaletteSetCreated += ribbonCreated;
       }
 
       void ribbonCreated(object sender, EventArgs e)
@@ -191,14 +241,25 @@ namespace Autodesk.AutoCAD.Runtime.AIUtils
          InitializeRibbon(RibbonControl, RibbonState.WorkspaceLoaded);
       }
 
-      protected static RibbonPaletteSet RibbonPaletteSet => RibbonServices.RibbonPaletteSet;
-      protected static RibbonControl RibbonControl => RibbonPaletteSet.RibbonControl;
+      /// <summary>
+      /// These properties are avaialble for use by 
+      /// derived types. Note that any of them may
+      /// return null and should be checked accordingly.
+      /// </summary>
+
+      protected static Document Document =>
+         Application.DocumentManager.MdiActiveDocument;
+
+      protected static RibbonPaletteSet RibbonPaletteSet => 
+         RibbonServices.RibbonPaletteSet;
+
+      protected static RibbonControl RibbonControl => 
+         RibbonPaletteSet.RibbonControl;
 
    }
 
    /// <summary>
-   /// Indicates the context in which InitializeRibbon() is
-   /// called.
+   /// Indicates the context in which InitializeRibbon() is called.
    /// </summary>
    
    public enum RibbonState
