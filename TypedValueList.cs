@@ -1,12 +1,8 @@
 ﻿using Autodesk.AutoCAD.DatabaseServices;
 using Autodesk.AutoCAD.EditorInput;
-using Autodesk.AutoCAD.Runtime;
-using System.Collections.Generic;
-using System;
-using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 
-namespace Autodesk.AutoCAD.ApplicationServices
+namespace Autodesk.AutoCAD.Runtime
 {
    /// <summary>
    /// An update of the original TypedValueList that was originally
@@ -135,6 +131,18 @@ namespace Autodesk.AutoCAD.ApplicationServices
          return result;
       }
 
+      //public object this[int index]
+      //{
+      //   get
+      //   {
+
+      //   }
+      //   set
+      //   {
+
+      //   }
+      //}
+
 
       /// The implicit conversion operators
       /// from the original TypedValueList:
@@ -142,37 +150,49 @@ namespace Autodesk.AutoCAD.ApplicationServices
       // Implicit conversion to SelectionFilter
       public static implicit operator SelectionFilter?(TypedValueList src)
       {
-         return src != null ? new SelectionFilter(src) : null;
+         if(src == null)
+            throw new ArgumentNullException(nameof(src));
+         return new SelectionFilter(src);
       }
 
       // Implicit conversion to ResultBuffer
       public static implicit operator ResultBuffer?(TypedValueList src)
       {
-         return src != null ? new ResultBuffer(src) : null;
+         if(src == null)
+            throw new ArgumentNullException(nameof(src));
+         return new ResultBuffer(src);
       }
 
       // Implicit conversion to TypedValue[] 
       public static implicit operator TypedValue[]?(TypedValueList src)
       {
-         return src != null ? src.ToArray() : null;
+         if(src == null)
+            throw new ArgumentNullException(nameof(src));
+         return src.ToArray();
       }
 
       // Implicit conversion from TypedValue[] 
       public static implicit operator TypedValueList?(TypedValue[] src)
       {
-         return src != null ? new TypedValueList(src) : null;
+         if(src == null)
+            throw new ArgumentNullException(nameof(src));
+         return new TypedValueList(src);
       }
 
       // Implicit conversion from SelectionFilter
       public static implicit operator TypedValueList?(SelectionFilter src)
       {
-         return src != null ? new TypedValueList(src.GetFilter()) : null;
+         if(src == null)
+            throw new ArgumentNullException(nameof(src));
+         return new TypedValueList(src.GetFilter());
       }
 
       // Implicit conversion from ResultBuffer
       public static implicit operator TypedValueList?(ResultBuffer src)
       {
-         return src != null ? new TypedValueList(src.AsArray()) : null;
+         if(src == null)
+            throw new ArgumentNullException(nameof(src));
+         return new TypedValueList(src.AsArray());
       }
 
       // NEW: Implicit conversion from ValueTuple(short, object)[]
