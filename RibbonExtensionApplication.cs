@@ -5,7 +5,6 @@
 /// that provides a simplified means of initializing
 /// and/or adding content to AutoCAD's ribbon UI.
 /// 
-/// Prerequisites: ExtensionApplicationAsync.cs
 
 using System;
 using Autodesk.AutoCAD.ApplicationServices;
