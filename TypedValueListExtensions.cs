@@ -1,6 +1,7 @@
 ﻿using Autodesk.AutoCAD.DatabaseServices;
 using System.Collections;
 using System.Runtime.CompilerServices;
+using System.Runtime.InteropServices;
 using System.Text;
 
 namespace Autodesk.AutoCAD.Runtime
@@ -24,6 +25,13 @@ namespace Autodesk.AutoCAD.Runtime
    /// AddRange() overloads cannot be used on arrays of TypedValue, as 
    /// they are not resizable. A runtime check is performed that rejects
    /// arrays in all methods that add/remove items to/from the target.
+   /// 
+   /// LINQ-less implementation.
+   /// 
+   /// Many of the operations performed by this class can be easily-
+   /// performed by LINQ operations of varying-complexity, but only 
+   /// at the cost of performance. That was in-part, the motivation 
+   /// behind including non-LINQ implmementations of those operations.
    /// </summary>
 
    public static class TypedValueListExtensions
@@ -247,7 +255,7 @@ namespace Autodesk.AutoCAD.Runtime
       
       public static ITypedValueList GetValueList(this IList<TypedValue> list)
       {
-         return new TypedValueListIndexer(list);
+         return new ImpTypedValueList(list);
       }
 
       /// <summary>
@@ -329,54 +337,61 @@ namespace Autodesk.AutoCAD.Runtime
       /// 
       /// </summary>
 
+      /// Helper for IEnumerable<T> advances the enumerator
+      /// while the given function returns true.
+
+      static bool Seek<T>(this IEnumerator<T> e, Func<T, bool> func)
+      {
+         while(e.MoveNext())
+            if(func(e.Current))
+               return true;
+         return false;
+      }
+
       public static IEnumerable<IList<TypedValue>> GroupBy(
-         this IList<TypedValue> list, short typeCode)
+         this IList<TypedValue> list, 
+         short typeCode)
       {
          int len = -1;
-         TypedValueList sublist = null;
+         TypedValueList? sublist = null;
          using(var e = list.GetEnumerator())
          {
-            while(e.MoveNext())
+            if(e.Seek(tv => tv.TypeCode == typeCode))
             {
-               TypedValue tv = e.Current;
-               if(tv.TypeCode == typeCode)
+               sublist = new TypedValueList(e.Current);
+               while(e.MoveNext())
                {
-                  sublist = new TypedValueList(tv);
-                  break;
-               }
-            }
-            while(e.MoveNext())
-            {
-               TypedValue tv = e.Current;
-               if(tv.TypeCode != typeCode)
-               {
-                  sublist.Add(tv);
-                  continue;
-               }
-               len = sublist.Count;
-               yield return sublist;
-               sublist = new TypedValueList(tv);
-               sublist.Capacity = len;
-               break;
-            }
-            while(e.MoveNext())
-            {
-               TypedValue tv = e.Current;
-               if(tv.TypeCode == typeCode)
-               {
+                  TypedValue tv = e.Current;
+                  if(tv.TypeCode != typeCode)
+                  {
+                     sublist.Add(tv);
+                     continue;
+                  }
+                  len = sublist.Count;
                   yield return sublist;
                   sublist = new TypedValueList(tv);
                   sublist.Capacity = len;
-                  continue;
-               }
-               else if(sublist.Count == len)
-               {
-                  yield return sublist;
                   break;
                }
-               else
+               while(e.MoveNext())
                {
-                  sublist.Add(tv);
+                  TypedValue tv = e.Current;
+                  if(tv.TypeCode == typeCode)
+                  {
+                     yield return sublist;
+                     sublist = new TypedValueList(tv);
+                     sublist.Capacity = len;
+                     continue;
+                  }
+                  else if(sublist.Count == len)
+                  {
+                     yield return sublist;
+                     break;
+                  }
+                  else
+                  {
+                     sublist.Add(tv);
+                  }
                }
             }
          }
@@ -408,42 +423,18 @@ namespace Autodesk.AutoCAD.Runtime
 
       public static IEnumerable<TypedValue> TakeAfter(this IList<TypedValue> list, short code)
       {
-         int last = list.IndexOfLast(code);
-         if(last > 0 && last < list.Count - 1)
+         return list.TakeAfter(tv => tv.TypeCode == code);
+      }
+
+      public static IEnumerable<T> TakeAfter<T>(this IList<T> list, Func<T, bool> predicate)
+      {
+         int next = list.IndexOfLast(predicate);
+         if(next > -1 && next < list.Count - 1)
          {
-            for(int i = last + 1; i < list.Count; i++)
+            for(int i = next; i < list.Count; i++)
                yield return list[i];
          }
       }
-
-      //public static IEnumerable<IList<TypedValue>> GroupBy(
-      //   this IList<TypedValue> list, short key, bool fixedLength = false)
-      //{
-      //   TypedValueList values = new TypedValueList();
-      //   int len = -1;
-      //   int cnt = 0;
-      //   using(var e = list.GetEnumerator())
-      //   {
-      //      while(e.MoveNext())
-      //      {
-      //         TypedValue tv = e.Current;
-      //         /// if we have a key or the lenght of the list == count
-      //         if(tv.TypeCode == key || cnt > 0 && values.Count == len)
-      //         {
-      //            if(values.Count > 0) 
-      //            {
-      //               if(cnt > 0 && fixedLength && len < 0)
-      //                  len = values.Count;
-      //               yield return values;
-      //               ++cnt;
-      //               values = new TypedValueList(tv);
-      //            }
-      //         }
-      //         values.Add(tv);
-      //      }
-      //   }
-      //   yield return values;
-      //}
 
       public static IEnumerable<TypedValue> Ungroup(this IEnumerable<IList<TypedValue>> list)
       {
@@ -451,8 +442,11 @@ namespace Autodesk.AutoCAD.Runtime
             throw new ArgumentNullException(nameof(list));
          foreach(var sublist in list)
          {
-            foreach(TypedValue tv in sublist)
-               yield return tv;
+            if(sublist != null)
+            {
+               foreach(TypedValue tv in sublist)
+                  yield return tv;
+            }
          }
       }
 
@@ -468,13 +462,11 @@ namespace Autodesk.AutoCAD.Runtime
 
       /// <summary>
       /// Returns the index of the first element in the list that
-      /// satisfies the given predicate.
+      /// satisfies the given predicate, or -1 if no element in
+      /// the list satisfies the predicate.
       /// </summary>
-      /// <param name="list"></param>
-      /// <param name="predicate"></param>
-      /// <returns></returns>
 
-      public static int IndexOf(this IList<TypedValue> list, Func<TypedValue, bool> predicate)
+      public static int IndexOf<T>(this IList<T> list, Func<T, bool> predicate)
       {
          for(int i = 0; i < list.Count; i++)
          {
@@ -484,7 +476,15 @@ namespace Autodesk.AutoCAD.Runtime
          return -1;
       }
 
-      public static int IndexOfLast(this IList<TypedValue> list, Func<TypedValue, bool> predicate)
+      /// TODO: Move to generic list extension class
+
+      /// <summary>
+      /// Returns the index of the last element in the list that
+      /// satisfies the given predicate, or -1 if no element in
+      /// the list satisfies the predicate.
+      /// </summary>
+
+      public static int IndexOfLast<T>(this IList<T> list, Func<T, bool> predicate)
       {
          for(int i = list.Count - 1; i >= 0; i--)
          {
@@ -494,14 +494,15 @@ namespace Autodesk.AutoCAD.Runtime
          return -1;
       }
 
+      /// <summary>
+      /// Returns the index of the last element in the list having
+      /// a TypeCode equal to the given code, or -1 if no element in 
+      /// the list has a TypeCode equal to the given code.
+      /// </summary>
+
       public static int IndexOfLast(this IList<TypedValue> list, short code)
       {
-         for(int i = list.Count - 1; i >= 0; i--)
-         {
-            if(list[i].TypeCode == code)
-               return i;
-         }
-         return -1;
+         return list.IndexOfLast(tv => tv.TypeCode == code);
       }
 
       /// <summary>
@@ -533,7 +534,7 @@ namespace Autodesk.AutoCAD.Runtime
       /// Inserts the specified number of new elements into the list starting
       /// at the specified index. Each newly-inserted element has the specified
       /// type code, and a value produced by the given function, which takes the
-      /// integer offset of the newly-inserted item, relative to the index argument.
+      /// integer offset of the newly-inserted item relative to the index argument.
       /// </summary>
       /// <param name="list">The List<TypedValue> to insert the items into</param>
       /// <param name="index">The index at which to insert the new item(s)</param>
@@ -603,37 +604,84 @@ namespace Autodesk.AutoCAD.Runtime
          }
       }
 
+      /// <summary>
+      /// Returns the number of elements in the given list
+      /// having a TypeCode equal to the specified value.
+      /// 
+      /// While this can be easily accomplished using the
+      /// LINQ Count() method, that method doesn't optimize
+      /// for IList types and requires the use of a delegate.
+      /// </summary>
+      /// <param name="list"></param>
+      /// <param name="code"></param>
+      /// <returns></returns>
+
       public static int CountOfType(this IList<TypedValue> list, short code)
       {
-         int result = 0;
-         for(int i = 0; i <= list.Count; i++)
+         if(list == null)
+            throw new ArgumentNullException(nameof(list));
+         int count = 0;
+         int end = list.Count;
+         List<TypedValue>? implist = list as List<TypedValue>;
+         if(implist != null)
          {
-            if(list[i].TypeCode == code)
-               ++result;
+            var span = CollectionsMarshal.AsSpan(implist);
+            for(int i = 0; i < end; i++)
+            {
+               if(span[i].TypeCode == code)
+                  ++count;
+            }
          }
-         return result;
+         else
+         {
+            for(int i = 0; i < end; i++)
+            {
+               if(list[i].TypeCode == code)
+                  ++count;
+            }
+         }
+         return count;
       }
 
       /// <summary>
-      /// Returns a sequence of the indices of elements
-      /// having the specified type code.
+      /// Returns a sequence containing the indices of 
+      /// every element whose TypeCode is equal to the
+      /// specified code.
       /// </summary>
 
       public static IEnumerable<int> IndicesOfType(this IList<TypedValue> list, short code)
       {
-         for(int i = 0; i < list.Count; i++)
-         {
-            if(list[i].TypeCode == code)
-               yield return i;
-         }
+         return list.IndicesWhere(tv => tv.TypeCode == code);
       }
 
-      public static IEnumerable<int> IndicesOf(this IList<TypedValue> list, Func<TypedValue, bool> predicate)
+      /// TODO: Move to generic list extension class
+
+      /// <summary>
+      /// Returns a sequence containing the indices of
+      /// all elements that satisify the given predicate.
+      /// </summary>
+
+      public static IEnumerable<int> IndicesWhere<T>(this IList<T> list, Func<T, bool> predicate)
       {
-         for(int i = 0; i < list.Count; i++)
+         if(list == null)
+            throw new ArgumentNullException(nameof(list));
+         List<T>? implist = list as List<T>;
+         if(implist != null)
          {
-            if(predicate(list[i]))
-               yield return i;
+            var span = CollectionsMarshal.AsSpan(implist);
+            for(int i = 0; i < list.Count; i++)
+            {
+               if(predicate(span[i]))
+                  yield return i;
+            }
+         }
+         else
+         {
+            for(int i = 0; i < list.Count; i++)
+            {
+               if(predicate(list[i]))
+                  yield return i;
+            }
          }
       }
 
@@ -653,6 +701,8 @@ namespace Autodesk.AutoCAD.Runtime
 
       public static int GetIndexOfTypeAt(this IList<TypedValue> list, short code, int index)
       {
+         if(list == null)
+            throw new ArgumentNullException(nameof(list));
          int idx = -1;
          if(index < 0)
          {
@@ -674,16 +724,19 @@ namespace Autodesk.AutoCAD.Runtime
          }
       }
 
-      static void CheckIndex(this IList<TypedValue> list, int index)
+      static void CheckIndex(this IList<TypedValue> list, int index, bool checkFixedSize = false)
       {
+         if(list == null)
+            throw new ArgumentNullException(nameof(list));
+         if(checkFixedSize)
+            CheckIsFixedSize(list);
          if(index < 0 || index >= list.Count)
             throw new IndexOutOfRangeException(index.ToString());
       }
 
       public static T SetValueAt<T>(this IList<TypedValue> list, int index, T value)
       {
-         CheckIsFixedSize(list);
-         CheckIndex(list, index);
+         CheckIndex(list, index, true);
          var tv = list[index];
          if(!(tv.Value is T))
             throw new ArgumentException("type mismatch");
@@ -703,7 +756,7 @@ namespace Autodesk.AutoCAD.Runtime
       /// having the given type code. The subindex of the first element
       /// having the given type code is 0</param>
 
-      public static void ReplaceValuesOfType<T>(this IList<TypedValue> list, short code, Func<int, T, T> converter)
+      public static void ReplaceValues<T>(this IList<TypedValue> list, short code, Func<int, T, T> converter)
       {
          CheckIsFixedSize(list);
          int subindex = -1;
@@ -748,7 +801,8 @@ namespace Autodesk.AutoCAD.Runtime
       /// of ObjectIds as hard/soft owner/pointer references,
       /// according to the specified DxfCode.
       /// 
-      /// This version is somewhat faster because it avoids 
+      /// This version is somewhat faster than the version 
+      /// that takes an IEnumerable<T>, because it avoids 
       /// using LINQ, which is not really appropriate when
       /// dealing with collections of determinant size:
       /// </summary>
@@ -794,12 +848,14 @@ namespace Autodesk.AutoCAD.Runtime
       public new object this[int index] { get; set; }
    }
 
-   class TypedValueListIndexer : ITypedValueList
+   class ImpTypedValueList : ITypedValueList
    {
       private readonly IList<TypedValue> source;
 
-      public TypedValueListIndexer(IList<TypedValue> source)
+      public ImpTypedValueList(IList<TypedValue> source)
       {
+         if(source == null)
+            throw new ArgumentNullException(nameof(source));
          this.source = source;
       }
 
@@ -826,6 +882,7 @@ namespace Autodesk.AutoCAD.Runtime
       {
          return this.GetEnumerator();
       }
+
    }
 
 
