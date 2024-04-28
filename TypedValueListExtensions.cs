@@ -1,13 +1,8 @@
-﻿#define NOACAD
-// using Autodesk.AutoCAD.DatabaseServices;
-// using Autodesk.AutoCAD.Runtime;
-using Autodesk.AutoCAD.Runtime;
-using System;
-using System.Collections.Generic;
-using System.Linq;
+﻿using Autodesk.AutoCAD.DatabaseServices;
+using System.Collections;
 using System.Text;
 
-namespace Autodesk.AutoCAD.ApplicationServices
+namespace Autodesk.AutoCAD.Runtime
 {
    /// <summary>
    /// Partial conversion of TypedValueList methods to extension 
@@ -19,17 +14,19 @@ namespace Autodesk.AutoCAD.ApplicationServices
    /// 
    ///    http://www.theswamp.org/index.php?topic=14495.msg186823#msg186823
    /// 
-   /// Significant new functionality has also been implemented as 
-   /// extension methods.
+   /// Over the years, new functionality has been 
+   /// added, implemented as extension methods.
+   /// 
+   /// Notes: Most of these extension methods target IList<TypedValue>,
+   /// which includes List<TypedValue>, TypedValueList, and TypedValue[].
+   /// However, functions that are not read-only operations, such as the
+   /// AddRange() overloads cannot be used on arrays of TypedValue, as 
+   /// they are not resizable. A runtime check is performed that rejects
+   /// arrays in all methods that add/remove items to/from the target.
    /// </summary>
 
    public static class TypedValueListExtensions
    {
-
-      public static void Test()
-      {
-         List<TypedValue> list = new List<TypedValue>();
-      }
 
       /// <summary>
       /// Validates an IList<TypedValue> as not being fixed-size 
@@ -39,7 +36,7 @@ namespace Autodesk.AutoCAD.ApplicationServices
       /// While arrays support IList<T>, they cannot be expanded.
       /// </summary>
 
-      static IList<TypedValue> CheckIsResizable(IList<TypedValue> list)
+      static IList<TypedValue> CheckIsFixedSize(IList<TypedValue> list)
       {
          if(list == null)
             throw new ArgumentNullException(nameof(list));
@@ -49,22 +46,22 @@ namespace Autodesk.AutoCAD.ApplicationServices
       }
 
       /// <summary>
-      /// The original Add() overloads from TypedValueList:
+      /// The Add() overloads from the original TypedValueList:
       /// </summary>
 
       public static void Add(this IList<TypedValue> list, short typeCode, object value)
       {
-         CheckIsResizable(list).Add(new TypedValue(typeCode, value));
+         CheckIsFixedSize(list).Add(new TypedValue(typeCode, value));
       }
 
       public static void Add(this IList<TypedValue> list, LispDataType type, object value)
       {
-         CheckIsResizable(list).Add(new TypedValue((short)type, value));
+         CheckIsFixedSize(list).Add(new TypedValue((short)type, value));
       }
 
       public static void Add(this IList<TypedValue> list, DxfCode code, object value)
       {
-         CheckIsResizable(list).Add(new TypedValue((short)code, value));
+         CheckIsFixedSize(list).Add(new TypedValue((short)code, value));
       }
 
       /// <summary>
@@ -72,13 +69,42 @@ namespace Autodesk.AutoCAD.ApplicationServices
       /// with a type code determined by ResultBuffer.ObjectsToResbuf();
       /// </summary>
 
-#if(!NOACAD)
-      public static void AddRange<T>(this IList<TypedValue> list, params T[] values)
+      public static void AddRange(this IList<TypedValue> list, params object[] values)
       {
-         CheckIsResizable(list);
+         AddObjects(list, values);
+      }
+
+      /// <summary>
+      /// Overload of the above that accepts values as an IEnumerable
+      /// </summary>
+
+      public static void AddRange(this IList<TypedValue> list, IEnumerable values)
+      {
+         if(values == null)
+            throw new ArgumentNullException(nameof(values));
+         object[]? array = values as object[];
+         if(array == null)
+         {
+            ICollection? collection = values as ICollection;
+            if(collection != null)
+            {
+               array = new object[collection.Count];
+               collection.CopyTo(array, 0);
+            }
+            else
+            {
+               array = values.Cast<object>().ToArray();
+            }
+         }
+         AddObjects(list, array);
+      }
+
+      public static void AddObjects(this IList<TypedValue> list, object[] values)
+      {
+         CheckIsFixedSize(list);
          if(values != null && values.Length > 0)
          {
-            var ptr = Autodesk.AutoCAD.Runtime.Marshaler.ObjectsToResbuf(values);
+            var ptr = Marshaler.ObjectsToResbuf(values);
             if(ptr == IntPtr.Zero)
                throw new InvalidOperationException($"failed to convert {nameof(values)} to resbuf");
             ResultBuffer buffer = (ResultBuffer)DisposableWrapper.Create(typeof(ResultBuffer), ptr, true);
@@ -86,26 +112,12 @@ namespace Autodesk.AutoCAD.ApplicationServices
          }
       }
 
-      /// <summary>
-      /// Overload of the above that accepts values as an IEnumerable<T>
-      /// </summary>
-
-      public static void AddRange<T>(this IList<TypedValue> list, IEnumerable<T> values)
-      {
-         if(values == null)
-            throw new ArgumentNullException(nameof(values));
-         AddRange<T>(list, values as T[] ?? values.ToArray());
-      }
-
-#endif
-
       /// Adds a range of elements expressed as IEnumerable<TypedValue>
 
       static void AddRange(IList<TypedValue> list, IEnumerable<TypedValue> values)
       {
-         CheckIsResizable(list);
-         List<TypedValue>? tmp = list as List<TypedValue>;
-         if(tmp != null)
+         CheckIsFixedSize(list);
+         if(list is List<TypedValue> tmp)
          {
             tmp.AddRange(values);
          }
@@ -116,22 +128,28 @@ namespace Autodesk.AutoCAD.ApplicationServices
          }
       }
 
+      public static void AddRange(this IList<TypedValue> list, ResultBuffer rb)
+      {
+         AddRange(list, rb.Cast<TypedValue>());
+      }
+
       /// <summary>
       /// Adds a range of elements expressed as ValueTyple(short, object):
       /// </summary>
 
       public static void AddRange(this IList<TypedValue> list, params (short code, object value)[] args)
       {
-         CheckIsResizable(list);
+         CheckIsFixedSize(list);
          if(args == null)
             throw new ArgumentNullException(nameof(args));
          AddRange(list, args.Select(arg => new TypedValue(arg.code, arg.value)));
       }
 
+
       /// <summary>
       /// Adds a range of elements all having the same 
-      /// given type code, and each having one of the 
-      /// given values:
+      /// given type code, each having one of the given 
+      /// values:
       /// 
       /// e.g.:
       /// <code>
@@ -151,7 +169,7 @@ namespace Autodesk.AutoCAD.ApplicationServices
       /// This method is overloaded with 2 variants x 3 versions, 
       /// varying by the type of the type code (LispDataType, DxfCode,
       /// and short), and by the form in which the values are provided
-      /// (one as params and one as IEnumerable<T>).
+      /// (one as params T[], and one as IEnumerable<T>).
       /// 
       /// </summary>
       /// <typeparam name="T"></typeparam>
@@ -161,7 +179,7 @@ namespace Autodesk.AutoCAD.ApplicationServices
 
       public static void AddRange<T>(this IList<TypedValue> list, short code, params T[] values)
       {
-         CheckIsResizable(list);
+         CheckIsFixedSize(list);
          if(values == null)
             throw new ArgumentNullException(nameof(values));
          if(values.Length > 0)
@@ -170,11 +188,11 @@ namespace Autodesk.AutoCAD.ApplicationServices
 
       public static void AddRange<T>(this IList<TypedValue> list, short code, IEnumerable<T> values)
       {
-         CheckIsResizable(list);
+         CheckIsFixedSize(list);
          if(values == null)
             throw new ArgumentNullException(nameof(values));
          if(values.Any())
-            AddRange(list, values.Select(v => new TypedValue(code, v)));
+            AddRange(list, values.Select(value => new TypedValue(code, value)));
       }
 
       public static void AddRange<T>(this IList<TypedValue> list, DxfCode code, params T[] values)
@@ -198,6 +216,40 @@ namespace Autodesk.AutoCAD.ApplicationServices
       }
 
       /// <summary>
+      /// Gets an instance of an interface type that
+      /// provides direct access to the value of each
+      /// TypedValue element in the list, via an indexer.
+      /// 
+      /// For example:
+      /// <code>
+      ///           
+      ///    IList<TypedValue> list = new List<TypedValue>();
+      ///    list.AddRange(DxfCode.Text, "Moe", "Larry", "Curly");
+      ///    ITypedValueList values = list.Values();
+      ///    
+      ///    /// The value of each element can be
+      ///    /// accessed via the indexer:
+      ///    
+      ///    string first = values[0];
+      ///    values[1] = "Felix";
+      ///           
+      ///    
+      /// </code>
+      /// Note that the returned ITypedValueList does not
+      /// represent a copy of the source/input list, it is
+      /// just a wrapper around it.
+      /// </summary>
+      /// <param name="list">The list of TypedValues</param>
+      /// <returns>An instance of an ITypedValueList that
+      /// provides access to the Values of each TypedValue
+      /// element in the given list.</returns>
+      
+      public static ITypedValueList GetValuesList(this IList<TypedValue> list)
+      {
+         return new TypedValueListIndexer(list);
+      }
+
+      /// <summary>
       /// Returns a sequence of IList<TypedValue> where each
       /// element represents a repeating sequence that starts
       /// with an element having the given typeCode.
@@ -217,7 +269,8 @@ namespace Autodesk.AutoCAD.ApplicationServices
       /// 
       /// Example:
       /// <code>
-      /// static void TestTypedValueListExtensions()
+      /// 
+      /// static void GroupByExample()
       /// {
       ///    TypedValueList list = new TypedValueList(
       /// 
@@ -226,35 +279,35 @@ namespace Autodesk.AutoCAD.ApplicationServices
       ///       (3, "Curly"),
       ///       (4, "Foo"),
       ///       (5, "Bar"),
-      ///       (330, "Group 1"),
+      ///       (330, "Group 1"), // start of first sequence
       ///       (10, 0.0),
       ///       (40, 0.25),
       ///       (210, 1.0),
-      ///       (330, "Group 2"),
+      ///       (330, "Group 2"), // start of second sequence
       ///       (10, 0.0),
       ///       (40, 0.25),
-      ///       (210, 1.0),
+      ///       (210, 2.0),
       ///       (330, "Group 3"),
       ///       (10, 0.0),
       ///       (40, 0.25),
-      ///       (210, 1.0),
+      ///       (210, 3.0),
       ///       (330, "Group 4"),
       ///       (10, 0.0),
       ///       (40, 0.25),
-      ///       (210, 1.0),
+      ///       (210, 4.0),
       ///       (330, "Group 5"),
       ///       (10, 0.0),
       ///       (40, 0.25),
-      ///       (210, 1.0),
+      ///       (210, 5.0),
       ///       (7, "Seven"),
       ///       (8, "Eight"),
       ///       (9, "Nine"),
       ///       (10, "Ten")
       ///    );
       /// 
-      ///    var items = list.GroupBy(330);
+      ///    var groups = list.GroupBy(330);
       /// 
-      ///    foreach(var item in items)
+      ///    foreach(var item in groups)
       ///    {
       ///       Console.WriteLine(item.ToString<short>());
       ///    }
@@ -263,10 +316,10 @@ namespace Autodesk.AutoCAD.ApplicationServices
       /// The above code will produce the following output:
       /// 
       ///   (330: Group 1) (10: 0) (40: 0.25) (210: 1)
-      ///   (330: Group 2) (10: 0) (40: 0.25) (210: 1)
-      ///   (330: Group 3) (10: 0) (40: 0.25) (210: 1)
-      ///   (330: Group 4) (10: 0) (40: 0.25) (210: 1)
-      ///   (330: Group 5) (10: 0) (40: 0.25) (210: 1)
+      ///   (330: Group 2) (10: 0) (40: 0.25) (210: 2)
+      ///   (330: Group 3) (10: 0) (40: 0.25) (210: 3)
+      ///   (330: Group 4) (10: 0) (40: 0.25) (210: 4)
+      ///   (330: Group 5) (10: 0) (40: 0.25) (210: 5)
       /// 
       /// In the above example, each repeating sequence starts
       /// with an element having the TypeCode 330, and ends with 
@@ -328,6 +381,40 @@ namespace Autodesk.AutoCAD.ApplicationServices
          }
       }
 
+      /// <summary>
+      /// Returns a sequence containing all elements of the given
+      /// list starting with the first element, up to but exluding
+      /// the first element having the given type code.
+      /// </summary>
+      /// <param name="list"></param>
+      /// <param name="code"></param>
+      /// <returns></returns>
+
+      public static IEnumerable<TypedValue> TakeBefore(this IList<TypedValue> list, short code)
+      {
+         return list.TakeWhile(tv => tv.TypeCode != code);
+      }
+
+      /// <summary>
+      /// Returns a sequence of elements from the given list, 
+      /// starting with the first element that follows the
+      /// last element having the given type code, followed
+      /// by all remaining elements in the list.
+      /// </summary>
+      /// <param name="list"></param>
+      /// <param name="code"></param>
+      /// <returns></returns>
+
+      public static IEnumerable<TypedValue> TakeAfter(this IList<TypedValue> list, short code)
+      {
+         int last = list.IndexOfLast(code);
+         if(last > 0 && last < list.Count - 1)
+         {
+            for(int i = last; i < list.Count; i++)
+               yield return list[i];
+         }
+      }
+
       //public static IEnumerable<IList<TypedValue>> GroupBy(
       //   this IList<TypedValue> list, short key, bool fixedLength = false)
       //{
@@ -359,6 +446,8 @@ namespace Autodesk.AutoCAD.ApplicationServices
 
       public static IEnumerable<TypedValue> Ungroup(this IEnumerable<IList<TypedValue>> list)
       {
+         if(list == null)
+            throw new ArgumentNullException(nameof(list));
          foreach(var sublist in list)
          {
             foreach(TypedValue tv in sublist)
@@ -371,9 +460,42 @@ namespace Autodesk.AutoCAD.ApplicationServices
       /// or -1 if no element having the given type code exists.
       /// </summary>
 
-      public static int IndexOfType(this IList<TypedValue> list, short code)
+      public static int IndexOf(this IList<TypedValue> list, short code)
+      {
+         return list.IndexOf(tv => tv.TypeCode == code);
+      }
+
+      /// <summary>
+      /// Returns the index of the first element in the list that
+      /// satisfies the given predicate.
+      /// </summary>
+      /// <param name="list"></param>
+      /// <param name="predicate"></param>
+      /// <returns></returns>
+
+      public static int IndexOf(this IList<TypedValue> list, Func<TypedValue, bool> predicate)
       {
          for(int i = 0; i < list.Count; i++)
+         {
+            if(predicate(list[i]))
+               return i;
+         }
+         return -1;
+      }
+
+      public static int IndexOfLast(this IList<TypedValue> list, Func<TypedValue, bool> predicate)
+      {
+         for(int i = list.Count - 1; i >= 0; i--)
+         {
+            if(predicate(list[i]))
+               return i;
+         }
+         return -1;
+      }
+
+      public static int IndexOfLast(this IList<TypedValue> list, short code)
+      {
+         for(int i = list.Count - 1; i >= 0; i--)
          {
             if(list[i].TypeCode == code)
                return i;
@@ -382,11 +504,14 @@ namespace Autodesk.AutoCAD.ApplicationServices
       }
 
       /// <summary>
-      /// Inserts one or more new elements into the existing liSt, all of
-      /// which have the given type code, and each of which has one of the
-      /// given values.
+      /// Following along with the conventions used in the overloaded
+      /// AddRange(DxfCode, value, value, value, ...), this method will
+      /// insert one or more new elements into the existing liSt, all of
+      /// which have the given type code, and each of which has one of 
+      /// the given values.
       /// 
-      /// One element is inserted into the list for each provided value.
+      /// One element having the given code is inserted into the list 
+      /// for each provided value.
       /// 
       /// Note: This method is only applicable to List<TypedValue> or 
       /// TypedValueList. It cannot be used on any IList<TypedValue>.
@@ -398,7 +523,7 @@ namespace Autodesk.AutoCAD.ApplicationServices
 
       public static void InsertRange(this List<TypedValue> list, int index, short code, params object[] values)
       {
-         CheckIsResizable(list);
+         CheckIndex(list, index);
          IEnumerable<TypedValue> newItems = values.Select(val => new TypedValue(code, val));
          list.InsertRange(index, newItems);
       }
@@ -416,15 +541,46 @@ namespace Autodesk.AutoCAD.ApplicationServices
       /// <param name="func">A function that takes an integer offset from the
       /// index parameter, and returns the value to be assigned to the element</param>
 
-      public static void InsertRange(this List<TypedValue> list, int index, int count, short code, Func<int, object> func)
+      public static void InsertRange(this List<TypedValue> list, int index, int count, Func<int, TypedValue> func)
       {
-         CheckIsResizable(list);
-         list.InsertRange(index, Enumerable.Range(0, count)
-            .Select(i => new TypedValue(code, func(i))));
+         CheckIndex(list, index);
+         list.InsertRange(index, Enumerable.Range(0, count).Select(i => func(i)));
       }
 
       /// <summary>
-      /// Returns a sequence of values of the 
+      /// Inserts a sequence of TypedValues immediately after
+      /// the last existing element having the specified code.
+      /// </summary>
+
+      public static void InsertAfterLast(this List<TypedValue> list,
+         short code, IEnumerable<TypedValue> values)
+      {
+         int last = IndexOfLast(list, code);
+         if(last > -1)
+            list.InsertRange(last + 1, values);
+         else
+            throw new InvalidOperationException("item not found");
+      }
+
+      /// <summary>
+      /// Inserts a sequence of TypedValues all having the same
+      /// specified typeCode, and each having one of the specified 
+      /// values, immediately after the last existing element 
+      /// having the specified code.
+      /// </summary>
+
+      public static void InsertAfterLast<T>(this List<TypedValue> list,
+         short code, short typeCode, IEnumerable<T> values)
+      {
+         int last = IndexOfLast(list, code);
+         if(last > -1)
+            list.InsertRange(last + 1, values.Select(v => new TypedValue(typeCode, v)));
+         else
+            throw new InvalidOperationException("item not found");
+      }
+
+      /// <summary>
+      /// Returns a sequence of the values of all
       /// elements having the given type code.
       /// 
       /// While this can easily be done using Linq, 
@@ -446,8 +602,19 @@ namespace Autodesk.AutoCAD.ApplicationServices
          }
       }
 
+      public static int CountOfType(this IList<TypedValue> list, short code)
+      {
+         int result = 0;
+         for(int i = 0; i <= list.Count; i++)
+         {
+            if(list[i].TypeCode == code)
+               ++result;
+         }
+         return result;
+      }
+
       /// <summary>
-      /// Returns a sequence of indices of elements
+      /// Returns a sequence of the indices of elements
       /// having the specified type code.
       /// </summary>
 
@@ -460,6 +627,15 @@ namespace Autodesk.AutoCAD.ApplicationServices
          }
       }
 
+      public static IEnumerable<int> IndicesOf(this IList<TypedValue> list, Func<TypedValue, bool> predicate)
+      {
+         for(int i = 0; i < list.Count; i++)
+         {
+            if(predicate(list[i]))
+               yield return i;
+         }
+      }
+
       /// <summary>
       /// Gets the index of the nth occurence of an element 
       /// having the specified type code.
@@ -467,14 +643,14 @@ namespace Autodesk.AutoCAD.ApplicationServices
       /// <typeparam name="T"></typeparam>
       /// <param name="list"></param>
       /// <param name="code">The type code to search for</param>
-      /// <param name="index">The 0-based sub-index of the type.
+      /// <param name="index">The 0-based sub-index of the element.
       /// A value of 0 returns the first occurence of an element
       /// having the given type code. A negative value returns the 
-      /// last occurence of the element having the given type code.</param>
+      /// last occurence of an element having the given type code.</param>
       /// <returns>The index of the requested element having the given
-      /// type code, or -1 if no element was found with the given index.</returns>
+      /// type code, or -1 if no element was found with the given code.</returns>
 
-      public static int GetIndexOfTypeAt<T>(this IList<TypedValue> list, short code, int index)
+      public static int GetIndexOfTypeAt(this IList<TypedValue> list, short code, int index)
       {
          int idx = -1;
          if(index < 0)
@@ -505,7 +681,7 @@ namespace Autodesk.AutoCAD.ApplicationServices
 
       public static T SetValueAt<T>(this IList<TypedValue> list, int index, T value)
       {
-         CheckIsResizable(list);
+         CheckIsFixedSize(list);
          CheckIndex(list, index);
          var tv = list[index];
          if(!(tv.Value is T))
@@ -523,11 +699,12 @@ namespace Autodesk.AutoCAD.ApplicationServices
       /// <param name="converter">A function that takes the subindex of
       /// the element and the existing value, and returns the new value
       /// for the element. The subindex is the nth occurence of an element 
-      /// having the given type code.</param>
+      /// having the given type code. The subindex of the first element
+      /// having the given type code is 0</param>
 
       public static void ReplaceValuesOfType<T>(this IList<TypedValue> list, short code, Func<int, T, T> converter)
       {
-         CheckIsResizable(list);
+         CheckIsFixedSize(list);
          int subindex = -1;
          for(int i = 0; i < list.Count; i++)
          {
@@ -549,7 +726,7 @@ namespace Autodesk.AutoCAD.ApplicationServices
          if(list == null)
             throw new ArgumentNullException(nameof(list));
          Type type = typeof(T);
-         if(! (type == typeof(DxfCode) || type == typeof(LispDataType) || type == typeof(short)))
+         if(!(type == typeof(DxfCode) || type == typeof(LispDataType) || type == typeof(short)))
             throw new ArgumentException("Invalid type");
          StringBuilder sb = new StringBuilder();
          bool flag = type.IsEnum;
@@ -564,52 +741,96 @@ namespace Autodesk.AutoCAD.ApplicationServices
          }
          return sb.ToString();
       }
+
+      /// <summary>
+      /// Creates an XRecord containing the specified sequence
+      /// of ObjectIds as hard/soft owner/pointer references,
+      /// according to the specified DxfCode.
+      /// 
+      /// This version is somewhat faster because it avoids 
+      /// using LINQ, which is not really appropriate when
+      /// dealing with collections of determinant size:
+      /// </summary>
+      /// <param name="ids">The ObjectIds to store in the Xrecord</param>
+      /// <param name="code">The dxf code to assign to each element</param>
+      /// <returns>An Xrecord containing the given ObjectIds</returns>
+
+      public static Xrecord ToXrecord(this ObjectIdCollection ids, short code = 330)
+      {
+         if(ids == null)
+            throw new ArgumentNullException(nameof(ids));
+         TypedValue[] array = new TypedValue[ids.Count];
+         for(int i = 0; i < array.Length; i++)
+            array[i] = new TypedValue(code, ids[i]);
+         Xrecord xrecord = new Xrecord();
+         xrecord.XlateReferences = true;
+         xrecord.Data = new ResultBuffer(array);
+         return xrecord;
+      }
+
+      /// <summary>
+      /// Slower version that takes an IEnumerable<ObjectId>,
+      /// and uses helper methods from this class.
+      /// </summary>
+      /// <param name="ids">The ObjectIds to store in the Xrecord</param>
+      /// <param name="code">The dxf code to assign to each element</param>
+      /// <returns>An Xrecord containing the given ObjectIds</returns>
+
+      public static Xrecord ToXrecord(this IEnumerable<ObjectId> ids, short code = 330)
+      {
+         TypedValueList list = new TypedValueList();
+         list.AddRange(code, ids);
+         Xrecord xrecord = new Xrecord();
+         xrecord.XlateReferences = true;
+         xrecord.Data = list;
+         return xrecord;
+      }
+
    }
+
+   public interface ITypedValueList : IReadOnlyList<object>
+   {
+      public new object this[int index] { get; set; }
+   }
+
+   class TypedValueListIndexer : ITypedValueList
+   {
+      private readonly IList<TypedValue> source;
+
+      public TypedValueListIndexer(IList<TypedValue> source)
+      {
+         this.source = source;
+      }
+
+      public object this[int index]
+      {
+         get
+         {
+            return source[index].Value;
+         }
+         set
+         {
+            source[index] = new TypedValue(source[index].TypeCode, value);
+         }
+      }
+
+      public int Count => source.Count;
+
+      public IEnumerator<object> GetEnumerator()
+      {
+         return source.Select(tv => tv.Value).GetEnumerator();
+      }
+
+      IEnumerator IEnumerable.GetEnumerator()
+      {
+         return this.GetEnumerator();
+      }
+   }
+
+
 
 }
 
-/// static void TestTypedValueListExtensions()
-/// {
-///    TypedValueList list = new TypedValueList(
-/// 
-///       (1, "Moe"),
-///       (2, "Larry"),
-///       (3, "Curly"),
-///       (4, "Foo"),
-///       (5, "Bar"),
-///       (330, "Group 1"),
-///       (10, 0.0),
-///       (40, 0.25),
-///       (210, 1.0),
-///       (330, "Group 2"),
-///       (10, 0.0),
-///       (40, 0.25),
-///       (210, 1.0),
-///       (330, "Group 3"),
-///       (10, 0.0),
-///       (40, 0.25),
-///       (210, 1.0),
-///       (330, "Group 4"),
-///       (10, 0.0),
-///       (40, 0.25),
-///       (210, 1.0),
-///       (330, "Group 5"),
-///       (10, 0.0),
-///       (40, 0.25),
-///       (210, 1.0),
-///       (7, "Seven"),
-///       (8, "Eight"),
-///       (9, "Nine"),
-///       (10, "Ten")
-///    );
-/// 
-///    var items = list.GroupBy(330);
-/// 
-///    foreach(var item in items)
-///    {
-///       TypedValue[] array = item.ToArray();
-///       Console.WriteLine(array.ToString("({0}: {1})", " "));
-///    }
-/// }
+
 
 
