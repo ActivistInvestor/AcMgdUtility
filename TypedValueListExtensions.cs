@@ -1,5 +1,6 @@
 ﻿using Autodesk.AutoCAD.DatabaseServices;
 using System.Collections;
+using System.Runtime.CompilerServices;
 using System.Text;
 
 namespace Autodesk.AutoCAD.Runtime
@@ -225,7 +226,7 @@ namespace Autodesk.AutoCAD.Runtime
       ///           
       ///    IList<TypedValue> list = new List<TypedValue>();
       ///    list.AddRange(DxfCode.Text, "Moe", "Larry", "Curly");
-      ///    ITypedValueList values = list.Values();
+      ///    ITypedValueList values = list.GetValueList();
       ///    
       ///    /// The value of each element can be
       ///    /// accessed via the indexer:
@@ -242,9 +243,9 @@ namespace Autodesk.AutoCAD.Runtime
       /// <param name="list">The list of TypedValues</param>
       /// <returns>An instance of an ITypedValueList that
       /// provides access to the Values of each TypedValue
-      /// element in the given list.</returns>
+      /// element in the given list via an indexer.</returns>
       
-      public static ITypedValueList GetValuesList(this IList<TypedValue> list)
+      public static ITypedValueList GetValueList(this IList<TypedValue> list)
       {
          return new TypedValueListIndexer(list);
       }
