@@ -1,19 +1,24 @@
 ﻿/// RibbonExtensionApplication
 /// ActivistInvestor / Tony T
 /// 
-/// A specialization of ExtensionApplicationAsync
-/// that provides a simplified means of initializing
-/// and/or adding content to AutoCAD's ribbon UI.
-/// 
+/// A class that provides a simplified means of 
+/// initializing and managing application-provided
+/// content for AutoCAD's ribbon.
 
 using System;
+using System.Collections.Generic;
 using Autodesk.AutoCAD.ApplicationServices;
 using Autodesk.AutoCAD.Ribbon;
 using Autodesk.Windows;
 
-/// See the documentation for the base type in 
-/// ExtensionApplicationAsync.cs for details
-/// on generic initialization of an extension.
+/// This class provides the same functionality 
+/// founds in ExtensionApplicationAsync, along 
+/// with additional functionality for managing 
+/// an extension's ribbon content.
+/// 
+/// See ExtensionApplicationAsync.cs for details
+/// on using this class for initialization of an 
+/// extension application.
 /// 
 /// Also note that this class does not complement 
 /// ExtensionApplicationAsync, it replaces it and
@@ -21,63 +26,117 @@ using Autodesk.Windows;
 /// 
 /// Hence, if you derive a type from this class, 
 /// there is no need to derive another class from 
-/// ExtensionApplicationAsync (which is what this
-/// class derives from).
+/// ExtensionApplicationAsync, as this class also
+/// provides the functionality of the latter.
 /// 
-/// Ribbon Initalization:
+/// Ribbon Initalization and content management:
 /// 
 /// Adding application-provided content to the ribbon 
 /// is not as simple as it may at first seem. There are 
-/// several scenarios, all of which must be dealt with:
+/// several scenarios that must be dealt with:
 /// 
-///   1. An extension is loaded at startup. 
+///   1. The application is loaded (at startup,
+///      or at any later point during the AutoCAD 
+///      session), and the ribbon exists. In that
+///      case, the application can simply add its
+///      content to the ribbon.
 ///   
-///      In this case, there are two possiblities:
+///   2. The application is loaded (at startup,
+///      or at any later point during the AutoCAD 
+///      session), and the ribbon does not exist.
+///      In this case, the application must wait 
+///      for the ribbon to be created. If and when 
+///      that happens, the application must add its 
+///      content to the ribbon. 
+///         
+///      It should be noted that the ribbon may have 
+///      been turned off by the end user, and may 
+///      never be created.
 ///      
-///      A. The ribbon has just been created.
-///      
-///      B. The ribbon is turned off by the user,
-///         but may be turned on at any point in
-///         the current AutoCAD session.
-///      
-///      In the case of A, the application can add
-///      its content to the ribbon at startup via
-///      an override of the InitializeRibbon() method.
-///      
-///      In the case of B, the application can do
-///      nothing because the ribbon does not exist,
-///      but could be created at any point during
-///      the AutoCAD session as a result of the user
-///      issuing the RIBBON command. At that point,
-///      InitializeRibbon() will be called, and the 
-///      application must then add its content to the
-///      newly-created ribbon.
-///      
-///   2. An extension is loaded at any point during
-///      the AutoCAD session using NETLOAD.
-///      
-///      When the extension loads, the ribbon may or
-///      may not exist, resulting in the same set of
-///      conditions as scenario 1.
-///      
-///   In either of the above cases, if the ribbon does
-///   not exist, the application must wait until it is
-///   created (which may never happen), and then add
-///   its content to the ribbon.
-///   
-///   3.  The third scenario is where the ribbon exists,
-///       and the application has already added content
-///       to it, but a workspace is subsequently loaded, 
-///       causing the application-provided content to be 
-///       discarded, requiring it to be added again.
+///   3.  The application has been loaded and has
+///       added content to the ribbon (case 1 or 2), 
+///       and a workspace is subsequently loaded.
+///       Loading the workspace clears application-
+///       supplied content, requiring the application 
+///       to add its content to the ribbon again.
 ///   
 /// This class accomodates all of the above scenarios
-/// in a unified manner, by allowing a derived type to
-/// override the InitializeRibbon() method, which will
-/// be called whenever the application-provided content
-/// must be added to the ribbon. The InitializeRibbon()
-/// method has a RibbonState argument, that provides a
-/// hint as to why the method is being called.
+/// in a unified and simplified way. It does this by
+/// abstracting away the complex logic of detecting if
+/// and when ribbon content must be added to the ribbon 
+/// and then delgates the task of doing that to a single 
+/// overridden method in derived types (InitializeRibbon), 
+/// which will be called whenever application-provided 
+/// content must be added to the ribbon. 
+/// 
+/// The InitializeRibbon() method is passed an argument
+/// that provides a hint as to why the method is being 
+/// called (e.g., one of the aformentioned scenarios).
+/// 
+/// Regardless of how/when the method is called, the 
+/// override should add application-provided content 
+/// to the ribbon from within this method.
+/// 
+/// The context argument indicates the context in which
+/// the method is called, which can be for one of three 
+/// possible reasons:
+/// 
+///   Active:  
+///   
+///     The ribbon exists and application-provided 
+///     content should be added to it. 
+///     
+///     This is typically the context when applications 
+///     are loaded at startup; when the NETLOAD command 
+///     is used; or when the application is demand-loaded 
+///     because one of its commands was issued.
+///              
+///   Initalizing:   
+///   
+///     The ribbon was just created, and application-
+///     provided content should be added to it. This is
+///     the context that is passed when the ribbon does
+///     not exist at startup and is subsequently created
+///     at some point in the AutoCAD session as a result 
+///     of the user issuing the RIBBON command.
+///              
+///   WorkspaceLoaded: 
+///   
+///     The ribbon exists and was previously-initialized
+///     with application-provided content, and susequently
+///     a workspace was loaded that requires application-
+///     provided content to be added to the ribbon again.
+///
+/// Applications must override this method to add their
+/// content to the ribbon. 
+/// 
+/// This method may be called any number of times during 
+/// an AutoCAD session, with the context argument set to 
+/// RibbonContext.WorkspaceLoaded. In every case, content
+/// should be added to the ribbon because previously-added
+/// content is discarded when a workspace is loaded.
+/// 
+/// Remarks: 
+///
+/// This method should not be used to perform other types
+/// of always-required application initialization tasks 
+/// unrelated to the ribbon, because this method may never 
+/// be called (for example, the ribbon is not visible at 
+/// startup and is never made visible for the life of the 
+/// AutoCAD session).
+/// 
+/// It is highly-recommended that ribbon context be created 
+/// only once and cached in memory, so that the same content 
+/// can be added to the ribbon again, each time this method 
+/// is called.
+/// </summary>
+/// 
+/// 
+/// In addition to ribbon-related initialization, this
+/// class also provides an entry point for more-general
+/// initialization in the exact same form it takes in the
+/// sibling ExtensionApplicationAsync class (an override
+/// of the Initialize() method).
 /// 
 /// </summary>
 
@@ -87,12 +146,29 @@ namespace Autodesk.AutoCAD.Runtime.AIUtils
    {
 
       /// <summary>
-      /// Must override this method, and perform one-time
-      /// initialization tasks that do not have a depenence
-      /// on the ribbon.
+      /// optionally override this method to perform general
+      /// initialization tasks that can have no dependence
+      /// on the ribbon, which may not yet exist when this
+      /// method is called.
       /// </summary>
       
-      protected abstract void Initialize();
+      protected virtual void Initialize()
+      {
+      }
+
+      /// <summary>
+      /// Must be overridden in a derived type. This method 
+      /// is called at the point where an existing ribbon 
+      /// is found, or at some later point when the ribbon
+      /// is created (which may never happen), this method
+      /// will also be called (possibly many times) when a
+      /// workspace is loaded.
+      /// </summary>
+      /// <param name="context">A value indicating the context
+      /// in which the method is called.</param>
+      /// <param name="ribbon">The RibbonControl</param>
+
+      protected abstract void InitializeRibbon(RibbonControl ribbon, RibbonState context);
 
       /// <summary>
       /// Optionally, override this to perform cleanup
@@ -104,82 +180,7 @@ namespace Autodesk.AutoCAD.Runtime.AIUtils
       }
 
       /// <summary>
-      /// InitializeRibbon() method
-      /// 
-      /// When overridden in a derived type, this method 
-      /// is called at the point where an existing ribbon 
-      /// is found, or at some later point when the ribbon
-      /// is created (which may never happen), this method
-      /// will also be called (possibly many times) when a
-      /// workspace is loaded.
-      /// 
-      /// Regardless of how/when the method is called, the 
-      /// override should add application-provided content 
-      /// to the ribbon in this method.
-      /// 
-      /// The context argument indicates the context in which
-      /// the method is called, which can be for one of three 
-      /// possible reasons:
-      /// 
-      ///   Active:  
-      ///   
-      ///     The ribbon exists and application-provided 
-      ///     content should be added to it. 
-      ///     
-      ///     This is typically the context when applications 
-      ///     are loaded at startup; when the NETLOAD command 
-      ///     is used; or when the application is demand-loaded 
-      ///     because one of its commands was issued.
-      ///              
-      ///   Initalizing:   
-      ///   
-      ///     The ribbon was just created, and application-
-      ///     provided content should be added to it. This is
-      ///     the context that is passed when the ribbon does
-      ///     not exist at startup and is subsequently created
-      ///     at some point in the AutoCAD session as a result 
-      ///     of the user issuing the RIBBON command.
-      ///              
-      ///   WorkspaceLoaded: 
-      ///   
-      ///     The ribbon exists and was previously-initialized
-      ///     with application-provided content, and susequently
-      ///     a workspace was loaded that requires application-
-      ///     provided content to be added to the ribbon again.
-      ///
-      /// Applications must override this method to add their
-      /// content to the ribbon. 
-      /// 
-      /// This method may be called any number of times during 
-      /// an AutoCAD session, with the context argument set to 
-      /// RibbonContext.WorkspaceLoaded. In every case, content
-      /// should be added to the ribbon because previously-added
-      /// content is discarded when a workspace is loaded.
-      /// 
-      /// Remarks: 
-      ///
-      /// This method should not be used to perform other types
-      /// of application initialization tasks unrelated to the
-      /// ribbon, because this method may never be called (for
-      /// example, the ribbon is not visible at startup and is 
-      /// never made visible for the life of the AutoCAD session).
-      /// 
-      /// The Initialize() method should be used to perform other
-      /// application initialization tasks. That method is always
-      /// called when an extension is loaded, and is called before 
-      /// InitializeRibbon() is called. Hence, the Initialize() 
-      /// method should not have any depenence on the ribbon.
-      /// 
-      /// It is highly-recommended that ribbon context be created 
-      /// only once and cached in memory, so that the same content 
-      /// can be added to the ribbon again, each time this method 
-      /// is called.
-      /// </summary>
-
-      protected abstract void InitializeRibbon(RibbonControl ribbon, RibbonState context);
-
-      /// <summary>
-      /// For advanced or specialized use cases:
+      /// For advanced/specialized use cases:
       /// 
       /// Override this and return true if initialization
       /// should be deferred until the editor is quiescent.
@@ -237,7 +238,8 @@ namespace Autodesk.AutoCAD.Runtime.AIUtils
 
       void workspaceLoaded(object sender, EventArgs e)
       {
-         InitializeRibbon(RibbonControl, RibbonState.WorkspaceLoaded);
+         if(Document != null)
+            InitializeRibbon(RibbonControl, RibbonState.WorkspaceLoaded);
       }
 
       /// <summary>
@@ -266,6 +268,94 @@ namespace Autodesk.AutoCAD.Runtime.AIUtils
       Active = 0,           // The ribbon exists.
       Initalizing = 1,      // The ribbon exists and was just created.
       WorkspaceLoaded = 2   // The ribbon exists and a workspace was loaded/reloaded
+   }
+
+
+   public static class RibbonEventManager
+   {
+      static bool idleHandled = false;
+      static bool idleRaised = false;
+      static bool initializeRibbonRaised = false;
+
+      static RibbonEventManager()
+      {
+         Application.Idle += idle;
+         idleHandled = true;
+      }
+
+      private static void idle(object sender, EventArgs e)
+      {
+         idleRaised = true;
+         idleHandled = false;
+         Application.Idle -= idle;
+         if(RibbonControl != null)
+         {
+            RaiseInitializeRibbon(RibbonState.Active);
+            RibbonPaletteSet.WorkspaceLoaded += workspaceLoaded;
+         }
+         else
+            RibbonServices.RibbonPaletteSetCreated += ribbonPaletteSetCreated;
+      }
+
+      private static void ribbonPaletteSetCreated(object sender, EventArgs e)
+      {
+         RibbonServices.RibbonPaletteSetCreated -= ribbonPaletteSetCreated;
+         RaiseInitializeRibbon(RibbonState.Initalizing);
+      }
+
+      static void RaiseInitializeRibbon(RibbonState state)
+      {
+         if(RibbonControl == null)
+            throw new ArgumentNullException(nameof(RibbonControl));
+         initializeRibbon(RibbonControl, new InitializeRibbonEventArgs(state));
+         initializeRibbonRaised = true;
+      }
+
+      private static void workspaceLoaded(object sender, EventArgs e)
+      {
+         throw new NotImplementedException();
+      }
+
+      static event InitializeRibbonEventHandler initializeRibbon;
+
+      public static event InitializeRibbonEventHandler InitializeRibbon
+      {
+         add 
+         {
+            initializeRibbon += value;
+         }
+         remove 
+         { 
+         }
+      }
+
+
+
+      static HashSet<InitializeRibbonEventHandler> initialized 
+         = new HashSet<InitializeRibbonEventHandler>();
+
+      protected static RibbonPaletteSet RibbonPaletteSet =>
+         RibbonServices.RibbonPaletteSet;
+
+      protected static RibbonControl RibbonControl =>
+         RibbonPaletteSet.RibbonControl;
+
+   }
+
+   public delegate void InitializeRibbonEventHandler(object sender, InitializeRibbonEventArgs e);
+
+   public class InitializeRibbonEventArgs : EventArgs
+   {
+      public InitializeRibbonEventArgs(RibbonState state)
+      {
+         this.State = state;
+      }
+      public RibbonState State { get; private set; }
+      public RibbonPaletteSet RibbonPaletteSet =>
+         RibbonServices.RibbonPaletteSet;
+      public RibbonControl RibbonControl =>
+         RibbonPaletteSet.RibbonControl;
+
    }
 
 }
