@@ -411,7 +411,7 @@ namespace Autodesk.AutoCAD.Runtime
          int last = list.IndexOfLast(code);
          if(last > 0 && last < list.Count - 1)
          {
-            for(int i = last; i < list.Count; i++)
+            for(int i = last + 1; i < list.Count; i++)
                yield return list[i];
          }
       }
