@@ -1,8 +1,8 @@
-﻿/// RibbonExtensionApplication
+﻿/// RibbonEventManager.cs
 /// ActivistInvestor / Tony T
 /// 
-/// A class that provides a vastly-simplified means 
-/// of initializing and managing application-provided
+/// A class that provides a simplified means of 
+/// initializing and managing application-provided
 /// content added to AutoCAD's ribbon.
 /// 
 /// Source:
