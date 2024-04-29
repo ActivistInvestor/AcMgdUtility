@@ -10,11 +10,6 @@ using Autodesk.AutoCAD.ApplicationServices;
 using Autodesk.AutoCAD.Ribbon;
 using Autodesk.Windows;
 
-/// Prerequisites/dependencies:
-/// 
-///   RibbonEventManager: 
-///   IdleAction.cs: https://github.com/ActivistInvestor/AcMgdUtility/blob/main/IdleAction.cs
-///   
 /// This class provides the same functionality 
 /// founds in ExtensionApplicationAsync, along 
 /// with additional functionality for managing 
