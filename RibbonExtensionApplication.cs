@@ -12,7 +12,7 @@ using Autodesk.AutoCAD.Ribbon;
 using Autodesk.Windows;
 
 /// This class provides the same functionality 
-/// founds in ExtensionApplicationAsync, along 
+/// found in ExtensionApplicationAsync, along 
 /// with additional functionality for managing 
 /// an extension's ribbon content.
 /// 
