@@ -95,7 +95,7 @@ namespace Autodesk.AutoCAD.Runtime.AIUtils
       static void Initialize(RibbonState state)
       {
          Debug.Assert(!initialized);
-         initializeRibbon(RibbonControl, new RibbonStateEventArgs(state));
+         RaiseInitializeRibbonEvent(state);
          RibbonPaletteSet.WorkspaceLoaded += workspaceLoaded;
          initialized = true;
       }
@@ -111,12 +111,17 @@ namespace Autodesk.AutoCAD.Runtime.AIUtils
 
       private static void workspaceLoaded(object sender, EventArgs e)
       {
-         if(Application.DocumentManager.IsApplicationContext)
+         RaiseInitializeRibbonEvent(RibbonState.WorkspaceLoaded);
+      }
+
+      static void RaiseInitializeRibbonEvent(RibbonState state, bool async = true)
+      {
+         if(!async && Application.DocumentManager.IsApplicationContext)
             initializeRibbon(RibbonPaletteSet,
-               new RibbonStateEventArgs(RibbonState.WorkspaceLoaded));
+               new RibbonStateEventArgs(state));
          else
             IdleAction<int>.OnIdle((i) => initializeRibbon(RibbonPaletteSet,
-               new RibbonStateEventArgs(RibbonState.WorkspaceLoaded)), 0);
+               new RibbonStateEventArgs(state)), 0);
       }
 
       public static event RibbonStateEventHandler InitializeRibbon
