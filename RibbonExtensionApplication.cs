@@ -6,13 +6,17 @@
 /// content for AutoCAD's ribbon.
 
 using System;
-using System.Collections.Generic;
 using Autodesk.AutoCAD.ApplicationServices;
 using Autodesk.AutoCAD.Ribbon;
 using Autodesk.Windows;
 
+/// Prerequisites/dependencies:
+/// 
+///   RibbonEventManager: 
+///   IdleAction.cs: https://github.com/ActivistInvestor/AcMgdUtility/blob/main/IdleAction.cs
+///   
 /// This class provides the same functionality 
-/// found in ExtensionApplicationAsync, along 
+/// founds in ExtensionApplicationAsync, along 
 /// with additional functionality for managing 
 /// an extension's ribbon content.
 /// 
@@ -112,9 +116,9 @@ using Autodesk.Windows;
 /// 
 /// This method may be called any number of times during 
 /// an AutoCAD session, with the context argument set to 
-/// RibbonContext.WorkspaceLoaded. In every case, content
-/// should be added to the ribbon because previously-added
-/// content is discarded when a workspace is loaded.
+/// RibbonState.WorkspaceLoaded. In such cases, content
+/// should be added to the ribbon because all previously-
+/// added content is discarded when a workspace is loaded.
 /// 
 /// Remarks: 
 ///
@@ -130,7 +134,6 @@ using Autodesk.Windows;
 /// can be added to the ribbon again, each time this method 
 /// is called.
 /// </summary>
-/// 
 /// 
 /// In addition to ribbon-related initialization, this
 /// class also provides an entry point for more-general
@@ -262,100 +265,26 @@ namespace Autodesk.AutoCAD.Runtime.AIUtils
    /// <summary>
    /// Indicates the context in which InitializeRibbon() is called.
    /// </summary>
-   
+
    public enum RibbonState
    {
-      Active = 0,           // The ribbon exists.
-      Initalizing = 1,      // The ribbon exists and was just created.
-      WorkspaceLoaded = 2   // The ribbon exists and a workspace was loaded/reloaded
+      /// <summary>
+      /// The ribbon exists but was not 
+      /// previously-initialized.
+      /// </summary>
+      Active = 0,
+
+      /// <summary>
+      /// The ribbon was just created.
+      /// </summary>
+      Initalizing = 1,
+
+      /// <summary>
+      /// The ribbon exists and was previously
+      /// initialized, and a workspace was just
+      /// loaded, requiring application-provided
+      /// ribbon content to be added again.
+      /// </summary>
+      WorkspaceLoaded = 2
    }
-
-
-   public static class RibbonEventManager
-   {
-      static bool idleHandled = false;
-      static bool idleRaised = false;
-      static bool initializeRibbonRaised = false;
-
-      static RibbonEventManager()
-      {
-         Application.Idle += idle;
-         idleHandled = true;
-      }
-
-      private static void idle(object sender, EventArgs e)
-      {
-         idleRaised = true;
-         idleHandled = false;
-         Application.Idle -= idle;
-         if(RibbonControl != null)
-         {
-            RaiseInitializeRibbon(RibbonState.Active);
-            RibbonPaletteSet.WorkspaceLoaded += workspaceLoaded;
-         }
-         else
-            RibbonServices.RibbonPaletteSetCreated += ribbonPaletteSetCreated;
-      }
-
-      private static void ribbonPaletteSetCreated(object sender, EventArgs e)
-      {
-         RibbonServices.RibbonPaletteSetCreated -= ribbonPaletteSetCreated;
-         RaiseInitializeRibbon(RibbonState.Initalizing);
-      }
-
-      static void RaiseInitializeRibbon(RibbonState state)
-      {
-         if(RibbonControl == null)
-            throw new ArgumentNullException(nameof(RibbonControl));
-         initializeRibbon(RibbonControl, new InitializeRibbonEventArgs(state));
-         initializeRibbonRaised = true;
-      }
-
-      private static void workspaceLoaded(object sender, EventArgs e)
-      {
-         throw new NotImplementedException();
-      }
-
-      static event InitializeRibbonEventHandler initializeRibbon;
-
-      public static event InitializeRibbonEventHandler InitializeRibbon
-      {
-         add 
-         {
-            initializeRibbon += value;
-         }
-         remove 
-         { 
-         }
-      }
-
-
-
-      static HashSet<InitializeRibbonEventHandler> initialized 
-         = new HashSet<InitializeRibbonEventHandler>();
-
-      protected static RibbonPaletteSet RibbonPaletteSet =>
-         RibbonServices.RibbonPaletteSet;
-
-      protected static RibbonControl RibbonControl =>
-         RibbonPaletteSet.RibbonControl;
-
-   }
-
-   public delegate void InitializeRibbonEventHandler(object sender, InitializeRibbonEventArgs e);
-
-   public class InitializeRibbonEventArgs : EventArgs
-   {
-      public InitializeRibbonEventArgs(RibbonState state)
-      {
-         this.State = state;
-      }
-      public RibbonState State { get; private set; }
-      public RibbonPaletteSet RibbonPaletteSet =>
-         RibbonServices.RibbonPaletteSet;
-      public RibbonControl RibbonControl =>
-         RibbonPaletteSet.RibbonControl;
-
-   }
-
 }
