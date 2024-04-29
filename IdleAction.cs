@@ -65,9 +65,8 @@ public class IdleAction
       get
       {
          Document doc = docs.MdiActiveDocument;
-         if(doc == null)
-            return !quiescentRequired && !documentRequired;
-         return !quiescentRequired || doc.Editor.IsQuiescent;
+         return (doc == null) ? !documentRequired 
+           : !quiescentRequired || doc.Editor.IsQuiescent;
       }
    }
 
