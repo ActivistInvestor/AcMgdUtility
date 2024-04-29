@@ -35,13 +35,9 @@ namespace Autodesk.AutoCAD.Runtime
             throw new ArgumentNullException(nameof(args));
          if(args.Length > 0)
          {
-#if(NET5_0_OR_GREATER)
             CollectionsMarshal.SetCount(this, args.Length);
             var span = new ReadOnlySpan<TypedValue>(args);
             span.CopyTo(CollectionsMarshal.AsSpan(this));
-#else
-            this.AddRange(args);
-#endif
          }
       }
 
@@ -130,19 +126,6 @@ namespace Autodesk.AutoCAD.Runtime
          }
          return result;
       }
-
-      //public object this[int index]
-      //{
-      //   get
-      //   {
-
-      //   }
-      //   set
-      //   {
-
-      //   }
-      //}
-
 
       /// The implicit conversion operators
       /// from the original TypedValueList:
