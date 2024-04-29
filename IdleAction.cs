@@ -1,10 +1,16 @@
-﻿using Autodesk.AutoCAD.ApplicationServices;
+﻿/// IdleAction.cs  ActivistInvestor / Tony T.
+/// Distributed under the terms of the MIT license
+/// 
+///   Repo source: https://github.com/ActivistInvestor/AcMgdUtility/blob/main/IdleAction.cs
+///
+
+using Autodesk.AutoCAD.ApplicationServices;
 using System;
 
 public class IdleAction
 {
    Action action;
-   bool quiescenceRequired = false;
+   bool quiescentRequired = false;
    bool documentRequired = false;
    static DocumentCollection docs = Application.DocumentManager;
 
@@ -29,7 +35,7 @@ public class IdleAction
       if(action != null)
       {
          this.documentRequired = document;
-         this.quiescenceRequired = quiescent;
+         this.quiescentRequired = quiescent;
          Application.Idle += idle;
       }
    }
@@ -60,8 +66,8 @@ public class IdleAction
       {
          Document doc = docs.MdiActiveDocument;
          if(doc == null)
-            return !quiescenceRequired && !documentRequired;
-         return !quiescenceRequired || doc.Editor.IsQuiescent;
+            return !quiescentRequired && !documentRequired;
+         return !quiescentRequired || doc.Editor.IsQuiescent;
       }
    }
 
