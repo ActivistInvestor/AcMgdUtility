@@ -117,10 +117,9 @@ namespace Autodesk.AutoCAD.Runtime.AIUtils
       static void RaiseInitializeRibbonEvent(RibbonState state, bool async = true)
       {
          if(!async && Application.DocumentManager.IsApplicationContext)
-            initializeRibbon(RibbonPaletteSet,
-               new RibbonStateEventArgs(state));
+            initializeRibbon(RibbonPaletteSet, new RibbonStateEventArgs(state));
          else
-            IdleAction<int>.OnIdle((i) => initializeRibbon(RibbonPaletteSet,
+            IdleAction<int>.OnIdle((_) => initializeRibbon(RibbonPaletteSet,
                new RibbonStateEventArgs(state)), 0);
       }
 
@@ -133,7 +132,7 @@ namespace Autodesk.AutoCAD.Runtime.AIUtils
 
             if(initialized)
             {
-               IdleAction<RibbonStateEventHandler>.OnIdle((handler) =>
+               IdleAction.OnIdle((handler) =>
                {
                   handler(RibbonPaletteSet, new RibbonStateEventArgs(RibbonState.Active));
                   initializeRibbon += handler;
