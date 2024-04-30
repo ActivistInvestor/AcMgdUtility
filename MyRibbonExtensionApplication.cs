@@ -16,9 +16,9 @@ using Autodesk.Windows;
 /// TODO: Modify the attribute parameter to be the type
 /// of the class derived from RibbonExtensionApplication:
 
-[assembly: ExtensionApplication(typeof(Example.MyRibbonExtensionApplication))]
+// [assembly: ExtensionApplication(typeof(Example.MyRibbonExtensionApplication))]
 
-namespace Example
+namespace RibbonExtensionApplicationExample1
 {
    /// <summary>
    /// Using the RibbonExtensionApplication class is easy. You
@@ -30,18 +30,21 @@ namespace Example
    /// The example below can be used as a template for building 
    /// your own derived type.
    /// 
-   /// Disclaimer: Use of RibbonExtensionApplication does not
-   /// require modification of that class, it only requires 
-   /// deriving a new class from it, like the example shown
-   /// below. If you instead use the base class by modifying 
-   /// it, you're on your own, and please do not ask for help 
-   /// or support, because you're not using the code in the 
-   /// manner it was indended to be used.
+   /// Disclaimer: 
+   /// 
+   /// Use of RibbonExtensionApplication does not require any
+   /// modification of that class, it only requires deriving a 
+   /// new class from it, like the example shown below. 
+   /// 
+   /// If you instead use the base class directly and modify it,
+   /// you're on your own and shouldn't expect help or support 
+   /// with that, because you're not using the code in the manner 
+   /// it was indended to be used.
    /// 
    /// You can post your comments, issues, bug reports, flames 
    /// or whatever in the repo at:
    /// 
-   ///    https://github.com/ActivistInvestor/AcMgdUtility/discussions
+   ///   https://github.com/ActivistInvestor/AcMgdUtility/discussions
    ///    
    /// </summary>
 
@@ -63,13 +66,12 @@ namespace Example
 
       /// <summary>
       /// This override may be called any number of times
-      /// (including none), when content must be added to
+      /// (or never), whenever content must be added to 
       /// the ribbon.
       /// 
-      /// Do not perform unrelated initialization tasks
-      /// that must always happen when an extension is
-      /// loaded in this override, because it may never 
-      /// be called.
+      /// Do not do unrelated initialization tasks that 
+      /// must always happen when an extension is loaded 
+      /// in this override, because it may never be called.
       /// </summary>
 
       protected override void InitializeRibbon(RibbonControl ribbon, RibbonState context)
