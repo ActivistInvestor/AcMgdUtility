@@ -298,14 +298,13 @@ namespace Autodesk.AutoCAD.Runtime.AIUtils
 
       void IExtensionApplication.Initialize()
       {
-         Application.Idle += OnIdle;
+         IdleAction.OnIdle(idle);
       }
 
-      void OnIdle(object sender, EventArgs e)
+      void idle()
       {
          if(Document != null && ! Quiescent || Document.Editor.IsQuiescent)
          {
-            Application.Idle -= OnIdle;
             try
             {
                Initialize();
@@ -411,6 +410,34 @@ namespace Autodesk.AutoCAD.Runtime.AIUtils
 
       protected static RibbonControl RibbonControl => 
          RibbonPaletteSet?.RibbonControl;
+
+      class IdleAction
+      {
+         Action action;
+
+         public IdleAction(Action action)
+         {
+            this.action = action;
+            Application.Idle += idle;
+         }
+
+         public static IdleAction OnIdle(Action action)
+         {
+            return new IdleAction(action);
+         }
+
+         void idle(object sender, EventArgs e)
+         {
+            if(action != null && Application.DocumentManager.MdiActiveDocument != null)
+            {
+               Application.Idle -= idle;
+               action();
+               action = null;
+            }
+         }
+      }
+
+
 
    }
 
