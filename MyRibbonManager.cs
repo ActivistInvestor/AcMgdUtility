@@ -18,7 +18,7 @@ using System.Collections.Generic;
 /// TODO: Modify the attribute parameter to be the type
 /// of the class derived from RibbonExtensionApplication:
 
-[assembly: ExtensionApplication(typeof(Example.MyRibbonExtensionApplication))]
+[assembly: ExtensionApplication(typeof(Example.MyRibbonManager))]
 
 namespace Example
 {
