@@ -253,7 +253,7 @@ namespace Autodesk.AutoCAD.Runtime.AIUtils
          RibbonServices.RibbonPaletteSet;
 
       protected static RibbonControl RibbonControl => 
-         RibbonPaletteSet.RibbonControl;
+         RibbonPaletteSet?.RibbonControl;
 
    }
 
