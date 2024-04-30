@@ -238,12 +238,23 @@ namespace Autodesk.AutoCAD.Runtime.AIUtils
 
       /// <summary>
       /// Clears/invalidates any cached ribbon content,
-      /// forcing it to be recreated.
+      /// forcing it to be recreated. If the refresh
+      /// argument is true, the content is recreated and
+      /// added to the ribbon (asynchronously, on the 
+      /// next Idle event).
+      /// 
+      /// This refresh argument should used with caution, 
+      /// as it can result in content being added to the
+      /// ribbon multiple times. Prior to calling this
+      /// method with refresh = true, any content that was 
+      /// previously-added to the ribbon should be removed.
       /// </summary>
 
-      protected void InvalidateRibbonContent()
+      protected void InvalidateRibbonContent(bool refresh = false)
       {
          RibbonContent = null;
+         if(refresh && RibbonControl != null)
+            IdleAction.OnIdle(() => InitializeContent(RibbonControl, RibbonState.RefreshContent));
       }
 
       /// <summary>
@@ -265,7 +276,7 @@ namespace Autodesk.AutoCAD.Runtime.AIUtils
       /// 
       /// If the CreateRibbonContent() and AddContentToRibbon()
       /// methods are overridden, this method does not have to
-      /// be (and probably shouldn't be) overridden. 
+      /// (and probably shouldn't) be overridden. 
       /// </summary>
       /// <param name="context">A value indicating the context
       /// in which the method is called.</param>
@@ -350,12 +361,27 @@ namespace Autodesk.AutoCAD.Runtime.AIUtils
          }
       }
 
-      static void ExecuteInApplicationContext(Action action)
+      /// <summary>
+      /// Executes code in the application context synchronously
+      /// or asynchronously depending on the quiescent and document
+      /// arguments.
+      /// </summary>
+      /// <param name="action">The action to execute</param>
+      /// <param name="document">true = requires an active document</param>
+      /// <param name="quiescent">true = requires a quiescent active document</param>
+
+      static void ExecuteInApplicationContext(Action action, bool quiescent = false, bool document = false)
       {
          if(Application.DocumentManager.IsApplicationContext)
-            action();
-         else
-            IdleAction.OnIdle(action);
+         {
+            document |= quiescent;
+            if((!document || Document != null) && (!quiescent || Document.Editor.IsQuiescent))
+            {
+               action();
+               return;
+            }
+         }
+         IdleAction.OnIdle(action, quiescent, document);
       }
 
       /// <summary>
@@ -372,7 +398,6 @@ namespace Autodesk.AutoCAD.Runtime.AIUtils
       {
          this.Terminate();
       }
-
 
       bool HasOverride(Delegate method)
       {
@@ -396,6 +421,7 @@ namespace Autodesk.AutoCAD.Runtime.AIUtils
             InitializeRibbonCore(RibbonState.WorkspaceLoaded);
       }
 
+
       /// <summary>
       /// These properties are avaialble for use by 
       /// derived types. Note that any of them may
@@ -414,21 +440,34 @@ namespace Autodesk.AutoCAD.Runtime.AIUtils
       class IdleAction
       {
          Action action;
+         bool quiescent = false;  // quiescent document required
+         bool document = true;    // document required
 
-         public IdleAction(Action action)
+         public IdleAction(Action action, bool quiescent = false, bool document = true)
          {
             this.action = action;
+            this.quiescent = quiescent;
+            this.document = quiescent || document;
             Application.Idle += idle;
          }
 
-         public static IdleAction OnIdle(Action action)
+         public static IdleAction OnIdle(Action action, bool quiescent = false, bool document = true)
          {
-            return new IdleAction(action);
+            return new IdleAction(action, quiescent, document);
+         }
+
+         bool CanInvoke()
+         {
+            if(action == null)
+               return false;
+            Document doc = Application.DocumentManager.MdiActiveDocument;
+            return (!document || doc != null)
+               && (!quiescent || doc.Editor.IsQuiescent);
          }
 
          void idle(object sender, EventArgs e)
          {
-            if(action != null && Application.DocumentManager.MdiActiveDocument != null)
+            if(CanInvoke())
             {
                Application.Idle -= idle;
                action();
@@ -436,8 +475,6 @@ namespace Autodesk.AutoCAD.Runtime.AIUtils
             }
          }
       }
-
-
 
    }
 
@@ -464,7 +501,13 @@ namespace Autodesk.AutoCAD.Runtime.AIUtils
       /// loaded, requiring application-provided
       /// ribbon content to be added again.
       /// </summary>
-      WorkspaceLoaded = 2
+      WorkspaceLoaded = 2,
+
+      /// <summary>
+      /// Indicates that ribbon content should be
+      /// reloaded for unspecified reasons.
+      /// </summary>
+      RefreshContent = 3
    }
 
 }
