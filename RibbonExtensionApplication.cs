@@ -256,8 +256,8 @@ namespace Autodesk.AutoCAD.Runtime.AIUtils
       /// workspace is loaded.
       /// 
       /// The context parameter indicates the circumstances
-      /// under which the method is being called, but is
-      /// required only in special use-cases.
+      /// under which the method is being called, but it is
+      /// mainly used only in special use-cases.
       /// 
       /// Generally, the context parameter should be ignored 
       /// or not be involved in any type of branching because 
@@ -364,8 +364,7 @@ namespace Autodesk.AutoCAD.Runtime.AIUtils
       void InitializeRibbonAsync(RibbonState context)
       {
          InitializeRibbon(RibbonControl, context);
-         if(context != RibbonState.WorkspaceLoaded) 
-            InitializeContent(RibbonControl, context);
+         InitializeContent(RibbonControl, context);
          AddWorkspaceLoadedHandler();
       }
 
