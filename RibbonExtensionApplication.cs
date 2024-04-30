@@ -11,11 +11,6 @@ using Autodesk.AutoCAD.ApplicationServices;
 using Autodesk.AutoCAD.Ribbon;
 using Autodesk.Windows;
 
-/// Prerequisites/dependencies:
-/// 
-///   RibbonEventManager: 
-///   IdleAction.cs: https://github.com/ActivistInvestor/AcMgdUtility/blob/main/IdleAction.cs
-///   
 /// This class provides the same functionality 
 /// founds in ExtensionApplicationAsync, along 
 /// with additional functionality for managing 
@@ -276,13 +271,6 @@ namespace Autodesk.AutoCAD.Runtime.AIUtils
       {
       }
 
-      void InitializeContent(RibbonControl ribbon, RibbonState context)
-      {
-         RibbonContent = RibbonContent ?? CreateRibbonContent(context);
-         if(RibbonContent != null)
-            AddContentToRibbon(RibbonControl, RibbonContent, context);
-      }
-
       /// <summary>
       /// Optionally, override this to perform cleanup
       /// tasks at shutdown.
@@ -358,6 +346,13 @@ namespace Autodesk.AutoCAD.Runtime.AIUtils
             RibbonServices.RibbonPaletteSetCreated += ribbonCreated;
       }
 
+      void InitializeContent(RibbonControl ribbon, RibbonState context)
+      {
+         RibbonContent = RibbonContent ?? CreateRibbonContent(context);
+         if(RibbonContent != null)
+            AddContentToRibbon(RibbonControl, RibbonContent, context);
+      }
+
       void InitializeRibbonAsync(RibbonState context)
       {
          InitializeRibbon(RibbonControl, context);
@@ -379,7 +374,6 @@ namespace Autodesk.AutoCAD.Runtime.AIUtils
          MethodInfo m = method.Method;
          return m != m.GetBaseDefinition();
       }
-
 
       /// <summary>
       /// Event handlers
