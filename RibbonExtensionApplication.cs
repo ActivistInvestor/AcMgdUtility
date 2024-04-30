@@ -146,9 +146,13 @@ using Autodesk.Windows;
 
 namespace Autodesk.AutoCAD.Runtime.AIUtils
 {
-   public abstract class RibbonExtensionApplication : IExtensionApplication
+   public abstract class RibbonExtensionApplication : RibbonExtensionApplication<object>
    {
-      protected object RibbonContent { get; private set; }
+   }
+
+   public abstract class RibbonExtensionApplication<T> : IExtensionApplication where T : class
+   {
+      protected T RibbonContent { get; private set; }
       bool observingWorkspaceLoaded = false;
       bool createContentImplemented = false;
 
@@ -213,7 +217,7 @@ namespace Autodesk.AutoCAD.Runtime.AIUtils
       /// <param name="state"></param>
       /// <returns>The content to be added to the ribbon</returns>
 
-      protected virtual object CreateRibbonContent(RibbonState state)
+      protected virtual T CreateRibbonContent(RibbonState state)
       {
          return null;
       }
@@ -228,7 +232,7 @@ namespace Autodesk.AutoCAD.Runtime.AIUtils
       /// <param name="content">The content to be added to the ribbon</param>
       /// <param name="state">The current RibbonState</param>
 
-      protected virtual void AddContentToRibbon(RibbonControl ribbon, object content, RibbonState state)
+      protected virtual void AddContentToRibbon(RibbonControl ribbon, T content, RibbonState state)
       {
       }
 
@@ -310,8 +314,40 @@ namespace Autodesk.AutoCAD.Runtime.AIUtils
             catch(System.Exception ex)
             {
                Console.Beep();
-               Document.Editor.WriteMessage(ex.ToString());
+               Document?.Editor.WriteMessage(ex.ToString());
             }
+         }
+      }
+
+      void InitializeRibbonCore(RibbonState context)
+      {
+         if(RibbonPaletteSet != null)
+            ExecuteInApplicationContext(() => InitializeRibbonAsync(context));
+         else
+            RibbonServices.RibbonPaletteSetCreated += ribbonCreated;
+      }
+
+      void InitializeContent(RibbonControl ribbon, RibbonState context)
+      {
+         if(RibbonContent == null)
+            RibbonContent = CreateRibbonContent(context);
+         if(RibbonContent != null)
+            AddContentToRibbon(RibbonControl, RibbonContent, context);
+      }
+
+      void InitializeRibbonAsync(RibbonState context)
+      {
+         InitializeRibbon(RibbonControl, context);
+         InitializeContent(RibbonControl, context);
+         AddWorkspaceLoadedHandler();
+      }
+
+      void AddWorkspaceLoadedHandler()
+      {
+         if(!observingWorkspaceLoaded)
+         {
+            RibbonPaletteSet.WorkspaceLoaded += workspaceLoaded;
+            observingWorkspaceLoaded = true;
          }
       }
 
@@ -338,36 +374,6 @@ namespace Autodesk.AutoCAD.Runtime.AIUtils
          this.Terminate();
       }
 
-      void InitializeRibbonCore(RibbonState context)
-      {
-         if(RibbonPaletteSet != null)
-            ExecuteInApplicationContext(() => InitializeRibbonAsync(context));
-         else
-            RibbonServices.RibbonPaletteSetCreated += ribbonCreated;
-      }
-
-      void InitializeContent(RibbonControl ribbon, RibbonState context)
-      {
-         RibbonContent = RibbonContent ?? CreateRibbonContent(context);
-         if(RibbonContent != null)
-            AddContentToRibbon(RibbonControl, RibbonContent, context);
-      }
-
-      void InitializeRibbonAsync(RibbonState context)
-      {
-         InitializeRibbon(RibbonControl, context);
-         InitializeContent(RibbonControl, context);
-         AddWorkspaceLoadedHandler();
-      }
-
-      void AddWorkspaceLoadedHandler()
-      {
-         if(!observingWorkspaceLoaded)
-         {
-            RibbonPaletteSet.WorkspaceLoaded += workspaceLoaded;
-            observingWorkspaceLoaded = true;
-         }
-      }
 
       bool HasOverride(Delegate method)
       {
