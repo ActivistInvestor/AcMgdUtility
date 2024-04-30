@@ -278,12 +278,9 @@ namespace Autodesk.AutoCAD.Runtime.AIUtils
 
       void InitializeContent(RibbonControl ribbon, RibbonState context)
       {
-         if(Document != null) 
-         {
-            RibbonContent = RibbonContent ?? CreateRibbonContent(context);
-            if(RibbonContent != null)
-               AddContentToRibbon(RibbonControl, RibbonContent, context);
-         }
+         RibbonContent = RibbonContent ?? CreateRibbonContent(context);
+         if(RibbonContent != null)
+            AddContentToRibbon(RibbonControl, RibbonContent, context);
       }
 
       /// <summary>
