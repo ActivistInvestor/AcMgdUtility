@@ -6,6 +6,7 @@
 /// content for AutoCAD's ribbon.
 
 using System;
+using System.Reflection;
 using Autodesk.AutoCAD.ApplicationServices;
 using Autodesk.AutoCAD.Ribbon;
 using Autodesk.Windows;
@@ -154,6 +155,7 @@ namespace Autodesk.AutoCAD.Runtime.AIUtils
    {
       protected object RibbonContent { get; private set; }
       bool observingWorkspaceLoaded = false;
+      bool createContentImplemented = false;
 
       /// <summary>
       /// optionally override this method to perform general
@@ -276,9 +278,12 @@ namespace Autodesk.AutoCAD.Runtime.AIUtils
 
       void InitializeContent(RibbonControl ribbon, RibbonState context)
       {
-         RibbonContent = RibbonContent ?? CreateRibbonContent(context);
-         if(RibbonContent != null)
-            AddContentToRibbon(RibbonControl, RibbonContent, context);
+         if(Document != null) 
+         {
+            RibbonContent = RibbonContent ?? CreateRibbonContent(context);
+            if(RibbonContent != null)
+               AddContentToRibbon(RibbonControl, RibbonContent, context);
+         }
       }
 
       /// <summary>
@@ -359,7 +364,8 @@ namespace Autodesk.AutoCAD.Runtime.AIUtils
       void InitializeRibbonAsync(RibbonState context)
       {
          InitializeRibbon(RibbonControl, context);
-         InitializeContent(RibbonControl, context);
+         if(context != RibbonState.WorkspaceLoaded) 
+            InitializeContent(RibbonControl, context);
          AddWorkspaceLoadedHandler();
       }
 
@@ -371,6 +377,13 @@ namespace Autodesk.AutoCAD.Runtime.AIUtils
             observingWorkspaceLoaded = true;
          }
       }
+
+      bool HasOverride(Delegate method)
+      {
+         MethodInfo m = method.Method;
+         return m != m.GetBaseDefinition();
+      }
+
 
       /// <summary>
       /// Event handlers
