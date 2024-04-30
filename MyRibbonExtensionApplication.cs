@@ -73,7 +73,7 @@ namespace Example
       /// In this override, we do nothing except create and return
       /// the ribbon content. The base class will cache it, and use
       /// it whenever the content needs to be added to the ribbon.
-      /// This example simplY adds an empty Tab to the ribbon.
+      /// This example simply adds an empty Tab to the ribbon.
       /// </summary>
 
       protected override object CreateRibbonContent(RibbonState state)
