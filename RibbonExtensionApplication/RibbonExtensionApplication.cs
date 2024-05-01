@@ -4,10 +4,11 @@
 /// A class that provides a simplified means of 
 /// initializing and managing application-provided
 /// content for AutoCAD's ribbon.
+/// 
+/// Source: https://github.com/ActivistInvestor/AcMgdUtility/blob/main/RibbonExtensionApplication/RibbonExtensionApplication.cs
+
 
 using System;
-using System.Reflection;
-using System.Threading.Tasks;
 using Autodesk.AutoCAD.ApplicationServices;
 using Autodesk.AutoCAD.Ribbon;
 using Autodesk.Windows;

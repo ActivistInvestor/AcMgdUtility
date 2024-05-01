@@ -66,8 +66,8 @@ namespace RibbonExtensionApplicationExample1
 
       /// <summary>
       /// This override may be called any number of times
-      /// (or never), whenever content must be added to 
-      /// the ribbon.
+      /// (including none), whenever content must be added 
+      /// to the ribbon.
       /// 
       /// Do not do unrelated initialization tasks that 
       /// must always happen when an extension is loaded 
