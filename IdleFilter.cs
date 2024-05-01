@@ -1,4 +1,5 @@
-﻿using System;
+﻿using Autodesk.AutoCAD.DatabaseServices;
+using System;
 using System.Collections;
 using System.Collections.Generic;
 
@@ -18,11 +19,11 @@ using System.Collections.Generic;
 ///   1. The DocumentRequired property is false, or
 ///      there is an active document in the editor.
 ///      
-///   2. The Quiescent property is false, or the
+///   2. The Quiescent property is false, or there
 ///      editor is in a quiescent state.
 ///    
 ///   3. The amount of time elapsed since the point 
-///      when the last notification was sent is greater 
+///      when the last notification was sent is less 
 ///      than the value of the Frequency property.
 /// 
 /// This base type is used by two concrete derived
@@ -41,6 +42,7 @@ namespace Autodesk.AutoCAD.ApplicationServices
       bool notifying = false;
       bool documentRequired = true;
       DateTime last = DateTime.MinValue;
+      bool lockDocument = false;
 
       /// <param name="frequency">The minimum frequency at which
       /// idle notifications are sent</param>
@@ -58,8 +60,8 @@ namespace Autodesk.AutoCAD.ApplicationServices
       /// instance is always disabled when it is disposed.
       /// </remarks>
 
-      public IdleFilter(TimeSpan frequency, 
-         bool quiescent = true, 
+      public IdleFilter(TimeSpan frequency,
+         bool quiescent = true,
          bool disabled = false,
          bool document = true)
       {
@@ -96,6 +98,12 @@ namespace Autodesk.AutoCAD.ApplicationServices
                OnEnabledChanged(enabled);
             }
          }
+      }
+
+      protected virtual void UpdateEnabled(bool reset = true)
+      {
+         if(reset)
+            Reset();
       }
 
       /// <summary>
@@ -139,7 +147,7 @@ namespace Autodesk.AutoCAD.ApplicationServices
       /// if there's an active document or not.
       /// </summary>
 
-      public bool DocumentRequired 
+      public bool DocumentRequired
       {
          get => documentRequired;
          set => documentRequired = value;
@@ -195,9 +203,11 @@ namespace Autodesk.AutoCAD.ApplicationServices
       {
          get
          {
-            return enabled && ! notifying 
-               && (!documentRequired || Application.DocumentManager.MdiActiveDocument != null)
-               && !Quiescent || IsQuiescent;
+            if(!enabled || notifying)
+               return false;
+            Document doc = Application.DocumentManager.MdiActiveDocument;
+            return doc == null ? !documentRequired 
+               : !Quiescent || doc.Editor.IsQuiescent;
          }
       }
 
@@ -224,15 +234,38 @@ namespace Autodesk.AutoCAD.ApplicationServices
          }
       }
 
-      // Note that this returns true if there is no document
+      // Note that this returns false if there is no document
 
       bool IsQuiescent
       {
          get
          {
             Document doc = Application.DocumentManager.MdiActiveDocument;
-            return doc == null || doc.Editor.IsQuiescent;
+            return doc != null && doc.Editor.IsQuiescent;
          }
+      }
+
+      /// <summary>
+      /// If true, the document will be automatically 
+      /// locked when the Idle event fires, and unlocked
+      /// when the event handler returns. 
+      /// 
+      /// Note that it is up to derived types to enforce
+      /// and implement automatic document locking/unlocking
+      /// at the point when the consumer gets control from
+      /// within the handler of the Idle notification.
+      /// </summary>
+
+      public bool LockDocument { get => lockDocument; set => lockDocument = value; }
+
+      public Document ActiveDocument => Application.DocumentManager.MdiActiveDocument;
+
+      protected IDisposable TryLockDocument()
+      {
+         if(LockDocument && ActiveDocument != null && Application.DocumentManager.IsApplicationContext)
+            return ActiveDocument.LockDocument();
+         else
+            return null;
       }
 
       public void Dispose()
@@ -258,7 +291,7 @@ namespace Autodesk.AutoCAD.ApplicationServices
    /// to handle notifications.
    /// </summary>
 
-   public class IdleAction : IdleFilter
+   public class IdleActionFilter : IdleFilter
    {
       Func<TimeSpan, bool> handler;
 
@@ -282,9 +315,9 @@ namespace Autodesk.AutoCAD.ApplicationServices
       /// <exception cref="ArgumentNullException">The
       /// action is null</exception>
 
-      public IdleAction(Func<TimeSpan, bool> action, 
-         TimeSpan frequency = default(TimeSpan), 
-         bool quiescent = true, 
+      public IdleActionFilter(Func<TimeSpan, bool> action,
+         TimeSpan frequency = default(TimeSpan),
+         bool quiescent = true,
          bool disabled = false,
          bool document = true) : base(frequency, quiescent, disabled, document)
       {
@@ -296,7 +329,10 @@ namespace Autodesk.AutoCAD.ApplicationServices
       protected override bool OnIdle(TimeSpan frequency)
       {
          base.OnIdle(frequency);
-         return handler(frequency);
+         using(TryLockDocument())
+         {
+            return handler(frequency);
+         }
       }
 
       /// <summary>
@@ -321,17 +357,17 @@ namespace Autodesk.AutoCAD.ApplicationServices
       /// invoke the action immediately on the next raising of 
       /// the Idle event without delay.</param>
 
-      public static void OnNextIdle(Action action, 
+      public static void OnNextIdle(Action action,
          bool quiescent = true,
          long delay = 0L)
       {
          if(action == null)
             throw new ArgumentNullException(nameof(action));
-         using(new IdleAction(delegate(TimeSpan unused)
+         using(new IdleActionFilter(delegate (TimeSpan unused)
          {
             action();
             return false;
-         }, TimeSpan.FromMilliseconds(delay), quiescent, false, true));
+         }, TimeSpan.FromMilliseconds(delay), quiescent, false, true)) ;
       }
    }
 
@@ -427,75 +463,397 @@ namespace Autodesk.AutoCAD.ApplicationServices
          add
          {
             idle += value;
-            Enabled = true;
+            UpdateEnabled();
          }
          remove
          {
             idle -= value;
-            Enabled = idle != null;
+            UpdateEnabled();
          }
+      }
+
+      protected override void UpdateEnabled(bool reset = true)
+      {
+         Enabled = idle != null;
+         base.UpdateEnabled(reset);
       }
 
       protected sealed override bool OnIdle(TimeSpan elapsed)
       {
          if(idle != null)
          {
-            var args = new IdleEventArgs(elapsed);
-            idle(this, args);
+            var args = GetEventArgs(elapsed);
+            using(TryLockDocument())
+            {
+               idle(this, args);
+            }
             return args.Enabled;
          }
          return false;
       }
 
-      /// <summary>
-      /// The following types are used by specializations of
-      /// IdleFilter that are not included in this distribution.
-      /// The main reason for this is due to the possiblity that
-      /// the type T could expose references to objects that are
-      /// no longer in-scope or usable.
-      /// </summary>
-
-      public delegate void IdleEventHandler<T>(object sender, IdleEventArgs<T> e) where T : EventArgs;
-      public class EventQueue<T> : Queue<IdleEventHandler<T>> where T:EventArgs { }
-     
-      public class IdleEventArgs<T> : IdleEventArgs where T:EventArgs
+      protected virtual IdleEventArgs GetEventArgs(TimeSpan elapsed)
       {
-         T sourceEventArgs;
-         WeakReference<Object> sender;
+         return new IdleEventArgs(elapsed);
+      }
+   }
 
-         public IdleEventArgs(object sender, T sourceEventArgs, TimeSpan duration) : base(duration)
-         {
-            this.sourceEventArgs = sourceEventArgs;
-            this.sender = new WeakReference<object>(sender);
-         }
+   public delegate void IdleEventHandler<T>(object sender, IdleEventArgs<T> e);
 
-         public bool IsSenderAlive 
-         { 
-            get
-            {
-               return sender.TryGetTarget(out _);
-            }
-         }
-
-         public object Sender 
-         {
-            get
-            {
-               if(sender.TryGetTarget(out var obj))
-                  return obj;
-               else
-                  return null;
-            }
-            private set 
-            { 
-               this.sender = new WeakReference<object>(sender); 
-            }
-         }
-
-         public T SourceEventArgs { get; private set; }
+   public class IdleEventArgs<T> : IdleEventArgs
+   {
+      IReadOnlyList<T> items;
+      public IdleEventArgs(List<T> list, TimeSpan duration) : base(duration)
+      {
+         this.items = list.AsReadOnly();
       }
 
+      public int Count => Items.Count;
 
+      public IReadOnlyList<T> Items
+      {
+         get => items;
+         private set => items = value;
+      }
+   }
+
+   /// <summary>
+   /// This class works in ways similar to IdleEventFilter, except
+   /// that it marshals a list of the generic argument type, and 
+   /// will invoke its Idle event at the prescribed time, passing 
+   /// in an instance of IdleEventArgs<T>, which provides access to 
+   /// the list containing all items added since the last time the 
+   /// Idle event was raised. Each time the Idle event is raised,
+   /// the contents of the list is cleared.
+   /// 
+   /// The Add() method is used to add event data to the instance. 
+   /// When the Idle event is raised, the Idle event handler is passed 
+   /// an event argument type that exposes the list of all items added 
+   /// to the instance since the last time the Idle event was raised. 
+   /// 
+   /// After the handler(s) for the Idle event return, the list is
+   /// cleared and the instance is disabled until more items are 
+   /// added to it.
+   /// 
+   /// Note that one way to allow information from different events
+   /// to be added to the instance, is to declare the generic argument
+   /// type as EventArgs, which allows any event argument that derives
+   /// from EventArgs to be added.
+   /// </summary>
+   /// <typeparam name="T">The type of the list element</typeparam>
+
+   public class EventDataCollection<T> : IdleFilter, IReadOnlyList<T>
+   {
+      event IdleEventHandler<T> idle;
+      protected internal List<T> list = new List<T>();
+      HashSet<T> set = null;
+      IEqualityComparer<T> comparer = null;
+      bool allowDuplicates = true;
+
+
+      /// <summary>
+      /// Creates a new instance that is disabled until a
+      /// handler is added to the Idle event and one or
+      /// more items are added to the instance.
+      /// </summary>
+      /// <param name="frequency">The minimum freqency at which
+      /// idle notifications are sent</param>
+      /// <param name="quiescent">Specifies if the idle
+      /// notification can/cannot be sent when the editor
+      /// is in a quiescent state (default = true)</param>
+
+      public EventDataCollection(TimeSpan frequency, bool quiescent = true, IEqualityComparer<T> comparer = null)
+         : base(frequency, quiescent, true, true)
+      {
+         this.comparer = comparer ?? EqualityComparer<T>.Default;
+      }
+
+      /// <summary>
+      /// Creates an instance using the default values of no
+      /// delay and to send notifications only when the editor
+      /// is quiescent:
+      /// </summary>
+
+      public EventDataCollection() : this(TimeSpan.FromSeconds(0), true)
+      {
+      }
+
+      /// <summary>
+      /// Exposes the filtered Application.Idle event to consumers.
+      /// </summary>
+      /// <remarks>
+      /// The instance is automatically enabled or disabled based on
+      /// if there are any handlers attached to this event and there
+      /// is at least one element added to the instance. 
+      /// </remarks>
+
+      public event IdleEventHandler<T> Idle
+      {
+         add
+         {
+            idle += value;
+            UpdateEnabled();
+         }
+         remove
+         {
+            idle -= value;
+            UpdateEnabled();
+         }
+      }
+
+      /// <summary>
+      /// Adds one or more elements to the instance.
+      /// </summary>
+      /// <remarks>
+      /// If the AllowDuplicates property is false,
+      /// attempts to add the same element multiple
+      /// times will be ignored without error.
+      /// 
+      /// Null values cannot be added to the instance.
+      /// </remarks>
+      /// <param name="data">One or more items to be 
+      /// added to the collection</param>
+
+      public virtual void Add(params T[] data)
+      {
+         if(data != null && data.Length > 0)
+         {
+            int cnt = this.Count;
+            if(!AllowDuplicates)
+            {
+               if(set == null)
+                  set = new HashSet<T>(this.comparer);
+               for(int i = 0; i < data.Length; i++)
+               {
+                  T item = data[i];
+                  if(item == null)
+                     throw new ArgumentException("null element");
+                  if(set.Add(item))
+                     list.Add(item);
+               }
+            }
+            else 
+            {
+               list.AddRange(data);
+            }
+            if(cnt != list.Count)
+            {
+               UpdateEnabled();
+               OnListChanged();
+            }
+         }
+      }
+
+      /// <summary>
+      /// Clears the internal list of event data, 
+      /// causing the instance to become disabled.
+      /// </summary>
+
+      public virtual void Clear()
+      {
+         list.Clear();
+         set?.Clear();
+         OnListChanged();
+         UpdateEnabled();
+      }
+
+      protected virtual void OnListChanged()
+      {
+      }
+
+      public int Count => list.Count;
+
+      public T this[int index] => list[index];
+
+      protected override void UpdateEnabled(bool reset = true)
+      {
+         Enabled = idle != null && list.Count > 0;
+         if(reset)
+            Reset();
+      }
+
+      /// <summary>
+      /// If true, the event data list contents must be
+      /// distinct, and may not contain multiple values
+      /// that compare as equal. If an attempt is made to
+      /// add an element that already exists in the list,
+      /// it is ignored and no error is signaled. The
+      /// default value is false. 
+      /// 
+      /// This property must be set prior to the first 
+      /// call to Add().
+      /// </summary>
+
+      public bool AllowDuplicates 
+      { 
+         get => allowDuplicates;
+         set
+         {
+            if(list.Count > 0)
+               throw new InvalidOperationException("list is not empty");
+            allowDuplicates = value;
+         }
+      }
+
+      protected sealed override bool OnIdle(TimeSpan elapsed)
+      {
+         if(idle != null && list.Count > 0)
+         {
+            using(TryLockDocument())
+            {
+               idle(this, new IdleEventArgs<T>(list, elapsed));
+               this.Clear();
+            }
+         }
+         return false;
+      }
+
+      public IEnumerator<T> GetEnumerator()
+      {
+         return list.GetEnumerator();
+      }
+
+      IEnumerator IEnumerable.GetEnumerator()
+      {
+         return this.GetEnumerator();
+      }
+
+   }
+
+   /// <summary>
+   /// This class provides same functionality as IdleEventFilter<T>,
+   /// except that it enforces uniqueness of event data list elements,
+   /// using a function that produces a key for each data item, which
+   /// must be unique across all elements. Any attempt to add an item
+   /// that produces the same key as an existing item will be ignored.
+   /// 
+   /// The type of data items can be simple types that will be treated
+   /// as a functional set, by simply declaring both generic arguments
+   /// to have the same type, and passing a function that returns its
+   /// argument. In the following example, the data item marshalled by
+   /// the IdleEventFilter are ObjectIds and the intent is to disallow
+   /// adding the same ObjectId to the data list more than once:
+   /// <code>
+   /// 
+   /// IdleEventFilter<ObjectId, ObjectId> filter = 
+   ///    new IdleEventFilter<ObjectId, ObjectId>(
+   ///       TimeSpan.FromSeconds(1),               // frequency
+   ///       id => id                               // key selector
+   ///    );
+   /// 
+   /// In the following example, a struct containing two ObjectIds
+   /// is marshalled by an IdleEventFilter, where one of the two
+   /// ObjectIds must be unique:
+   /// 
+   /// public struct ObjectIdWithOwner
+   /// {
+   ///    public ObjectIdWithOwner(ObjectId id, ObjectId ownerId)
+   ///    {
+   ///       this.Id = id;
+   ///       this.OwnerId = ownerId;
+   ///    }
+   ///    public ObjectId Id;
+   ///    public ObjectId OwnerId;
+   /// }
+   /// 
+   /// The function passed to the constructor mandates that the 
+   /// Id field of each element must be unique across all elements 
+   /// added to the instance:
+   /// 
+   /// IdleEventFilter<ObjectIdWithOwner> filter = 
+   ///    new IdleEventFilter<ObjectIdWithOwner>(arg => arg.id);
+   /// 
+   /// </code>
+   /// </summary>
+   /// <typeparam name="T">The type of the event data list element</typeparam>
+   /// <typeparam name="TKey">The type of the value to use to compare 
+   /// event data list elements for equality</typeparam>
+
+   public class EventDataCollection<T, TKey> : EventDataCollection<T>
+   {
+      /// <summary>
+      /// Creates a new instance that is disabled until a
+      /// handler is added to the Idle event.
+      /// </summary>
+      /// <param name="frequency">The minimum freqency at which
+      /// idle notifications are sent</param>
+      /// <param name="quiescent">Specifies if the idle
+      /// notification can/cannot be sent when the editor
+      /// is in a quiescent state (default = true)</param>
+
+      Func<T, TKey> selector;
+      HashSet<TKey> keys;
+
+      public EventDataCollection(Func<T, TKey> keySelector)
+         : base()
+      {
+         if(keySelector == null)
+            throw new ArgumentNullException(nameof(keySelector));
+         selector = keySelector;
+         base.AllowDuplicates = false;
+      }
+
+      public new bool AllowDuplicates { get { return false; } set { } }
+
+      public override void Add(params T[] data)
+      {
+         int count = base.Count;
+         if(data != null)
+         {
+            for(int i = 0; i < data.Length; i++)
+            {
+               T item = data[i];
+               if(keys.Add(selector(item)))
+                  list.Add(item);
+            }
+            if(count != base.Count)
+               UpdateEnabled();
+         }
+      }
+
+      public override void Clear()
+      {
+         keys.Clear();
+         base.Clear();
+      }
+
+   }
+
+   public class MyObjectModifiedObserver : IDisposable
+   {
+      private Database db;
+      EventDataCollection<ObjectId> collection;
+
+      public MyObjectModifiedObserver(Database db)
+      {
+         this.db = db;
+         db.ObjectModified += objectModified;
+         collection = new EventDataCollection<ObjectId>();
+         collection.Frequency = TimeSpan.FromSeconds(1);
+         collection.Quiescent = true;
+         collection.DocumentRequired = true;
+         collection.AllowDuplicates = false;
+         collection.Idle += OnIdle;
+      }
+
+      private void OnIdle(object sender, IdleEventArgs<ObjectId> args)
+      {
+         Document doc = Application.DocumentManager.MdiActiveDocument;
+         IReadOnlyList<ObjectId> list = args.Items;
+         for(int i = 0; i < list.Count; i++) 
+         {
+            doc.Editor.WriteMessage($"\nModified 0x{list[i].Handle.ToString().ToUpper()}");
+         }
+      }
+
+      private void objectModified(object sender, ObjectEventArgs e)
+      {
+         collection.Add(e.DBObject.ObjectId);
+      }
+
+      public void Dispose()
+      {
+      }
    }
 }
 

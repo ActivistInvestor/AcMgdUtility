@@ -11,33 +11,21 @@ using Autodesk.AutoCAD.ApplicationServices;
 using Autodesk.AutoCAD.Ribbon;
 using Autodesk.Windows;
 
-/// This class provides the same functionality 
-/// founds in ExtensionApplicationAsync, along 
-/// with additional functionality for managing 
-/// an extension's ribbon content.
+/// RibbonExtensionApplication class
 /// 
-/// See ExtensionApplicationAsync.cs for details
-/// on using this class for initialization of an 
-/// extension application.
-/// 
-/// Also note that this class does not complement 
-/// ExtensionApplicationAsync, it replaces it and
-/// provides all of its functionality. 
-/// 
-/// Hence, if you derive a type from this class, 
-/// there is no need to derive another class from 
-/// ExtensionApplicationAsync, as this class also
-/// provides the functionality of the latter.
+/// This class provides all functionality from 
+/// ExtensionApplicationAsync, and adds support 
+/// for managing an extension's ribbon content.
 /// 
 /// Ribbon Initalization and content management:
 /// 
 /// Adding application-provided content to the ribbon 
 /// is not as simple as it may at first seem. There are 
-/// several scenarios that must be dealt with:
+/// a few scenarios that all must be dealt with:
 /// 
 ///   1. The application is loaded (at startup,
 ///      or at any later point during the AutoCAD 
-///      session), and the ribbon exists. In that
+///      session), and the ribbon exists. In this
 ///      case, the application can simply add its
 ///      content to the ribbon.
 ///   
@@ -49,16 +37,17 @@ using Autodesk.Windows;
 ///      that happens, the application must add its 
 ///      content to the ribbon. 
 ///         
-///      It should be noted that the ribbon may have 
-///      been turned off by the end user, and may 
-///      never be created.
+///      It should be noted that the ribbon may not
+///      be visible at startup (e.g., perhaps because
+///      it was turned off by the end user), and may 
+///      never be made visible in the current session.
 ///      
-///   3.  The application has been loaded and has
-///       added content to the ribbon (case 1 or 2), 
-///       and a workspace is subsequently loaded.
-///       Loading the workspace clears application-
-///       supplied content, requiring the application 
-///       to add its content to the ribbon again.
+///   3. The application has been loaded, and has
+///      added content to the ribbon (case 1 or 2), 
+///      and subsequently, a workspace is loaded.
+///      Loading the workspace clears application-
+///      provided content, requiring the application 
+///      to add that content to the ribbon again.
 ///   
 /// This class accomodates all of the above scenarios
 /// in a unified and simplified way. It does this by
@@ -66,16 +55,17 @@ using Autodesk.Windows;
 /// and when ribbon content must be added to the ribbon 
 /// and then delgates the task of doing that to a single 
 /// overridden method in derived types (InitializeRibbon), 
-/// which will be called whenever application-provided 
-/// content must be added to the ribbon. 
+/// that will be called whenever the application-provided 
+/// content must be added to the ribbon, regardless of 
+/// the reason it is needed.
 /// 
 /// The InitializeRibbon() method is passed an argument
 /// that provides a hint as to why the method is being 
 /// called (e.g., one of the aformentioned scenarios).
 /// 
 /// Regardless of how/when the method is called, the 
-/// override should add application-provided content 
-/// to the ribbon from within this method.
+/// override should always add its ribbon content to
+/// the ribbon from within an override of this method.
 /// 
 /// The context argument indicates the context in which
 /// the method is called, which can be for one of three 
@@ -460,8 +450,8 @@ namespace Autodesk.AutoCAD.Runtime.AIUtils
          {
             if(action == null)
                return false;
-            Document doc = Application.DocumentManager.MdiActiveDocument;
-            return doc == null ? !document : !quiescent || doc.Editor.IsQuiescent;
+            return Document == null ? !document 
+               : !quiescent || Document.Editor.IsQuiescent;
          }
 
          void idle(object sender, EventArgs e)
