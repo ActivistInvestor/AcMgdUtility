@@ -7,6 +7,7 @@
 
 using System;
 using System.Reflection;
+using System.Threading.Tasks;
 using Autodesk.AutoCAD.ApplicationServices;
 using Autodesk.AutoCAD.Ribbon;
 using Autodesk.Windows;
@@ -364,8 +365,11 @@ namespace Autodesk.AutoCAD.Runtime.AIUtils
 
       /// <summary>
       /// Executes code in the application context synchronously
-      /// or asynchronously depending on the quiescent and document
-      /// arguments.
+      /// or asynchronously depending on the calling context and
+      /// the quiescent and document arguments.
+      /// 
+      /// It should be assumed that this method executes 
+      /// asynchronously, and
       /// </summary>
       /// <param name="action">The action to execute</param>
       /// <param name="document">true = requires an active document</param>
@@ -373,10 +377,18 @@ namespace Autodesk.AutoCAD.Runtime.AIUtils
 
       static void ExecuteInApplicationContext(Action action, bool quiescent = false, bool document = false)
       {
+         document |= quiescent;
          if(Application.DocumentManager.IsApplicationContext)
          {
-            document |= quiescent;
-            if((!document || Document != null) && (!quiescent || Document.Editor.IsQuiescent))
+            if(Document == null)
+            {
+               if(!document)
+               {
+                  action();
+                  return;
+               }
+            }
+            else if(!quiescent || Document.Editor.IsQuiescent)
             {
                action();
                return;
