@@ -7,7 +7,7 @@
 /// 
 /// Original source location:
 /// 
-/// https://github.com/ActivistInvestor/AcMgdUtility/blob/main/MyRibbonExtensionApplication.cs
+/// https://github.com/ActivistInvestor/AcMgdUtility/blob/main/RibbonExtensionApplication/MyRibbonExtensionApplication.cs
 ///
 
 using Autodesk.AutoCAD.Runtime.AIUtils;
