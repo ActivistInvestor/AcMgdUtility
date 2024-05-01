@@ -144,7 +144,6 @@ namespace Autodesk.AutoCAD.Runtime.AIUtils
    {
       protected T RibbonContent { get; private set; }
       bool observingWorkspaceLoaded = false;
-      bool createContentImplemented = false;
 
       /// <summary>
       /// optionally override this method to perform general
@@ -207,7 +206,7 @@ namespace Autodesk.AutoCAD.Runtime.AIUtils
       /// <param name="state"></param>
       /// <returns>The content to be added to the ribbon</returns>
 
-      protected virtual T CreateRibbonContent(RibbonState state)
+      protected virtual T GetRibbonContent(RibbonControl ribbon, RibbonState state)
       {
          return null;
       }
@@ -264,9 +263,9 @@ namespace Autodesk.AutoCAD.Runtime.AIUtils
       /// regardless of its value, the ribbon must be uniformly 
       /// initialized every time this method is called.
       /// 
-      /// If the CreateRibbonContent() and AddContentToRibbon()
-      /// methods are overridden, this method does not have to
-      /// (and probably shouldn't) be overridden. 
+      /// If the GetRibbonContent() and AddContentToRibbon()
+      /// methods are overridden, this method does not need
+      /// to (and probably shouldn't) be overridden. 
       /// </summary>
       /// <param name="context">A value indicating the context
       /// in which the method is called.</param>
@@ -293,6 +292,18 @@ namespace Autodesk.AutoCAD.Runtime.AIUtils
       /// </summary>
 
       protected virtual bool Quiescent => false;
+
+      /// <summary>
+      /// Override and return a value indicating if the
+      /// the InitializeRibbon() and AddContentToRibbon()
+      /// methods should be called if there is no active
+      /// document when a workspace is loaded and conent
+      /// must be added to the ribbon again. 
+      /// 
+      /// The default behavior requires an active document.
+      /// </summary>
+
+      protected virtual bool DocumentRequired => true;
 
       /// All code below this point is supporting
       /// code that should not have to be modified.
@@ -330,7 +341,7 @@ namespace Autodesk.AutoCAD.Runtime.AIUtils
       void InitializeContent(RibbonControl ribbon, RibbonState context)
       {
          if(RibbonContent == null)
-            RibbonContent = CreateRibbonContent(context);
+            RibbonContent = GetRibbonContent(RibbonControl, context);
          if(RibbonContent != null)
             AddContentToRibbon(RibbonControl, RibbonContent, context);
       }
@@ -374,25 +385,9 @@ namespace Autodesk.AutoCAD.Runtime.AIUtils
          IdleAction.OnIdle(action, quiescent, document);
       }
 
-      /// <summary>
-      /// Override to return the IRibbonContent provider whose
-      /// methods will be called to create and add content to
-      /// the ribbon. Derived types can implement this interface
-      /// and simply return 'this', or obtain an instance through
-      /// some other means.
-      /// </summary>
-      /// <param name="context"></param>
-      /// <returns></returns>
-
       void IExtensionApplication.Terminate()
       {
          this.Terminate();
-      }
-
-      bool HasOverride(Delegate method)
-      {
-         MethodInfo m = method.Method;
-         return m != m.GetBaseDefinition();
       }
 
       /// <summary>
@@ -407,7 +402,7 @@ namespace Autodesk.AutoCAD.Runtime.AIUtils
 
       void workspaceLoaded(object sender, EventArgs e)
       {
-         if(Document != null)
+         if(!DocumentRequired || Document != null) 
             InitializeRibbonCore(RibbonState.WorkspaceLoaded);
       }
 
