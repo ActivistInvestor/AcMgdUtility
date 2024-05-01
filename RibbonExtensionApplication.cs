@@ -461,8 +461,7 @@ namespace Autodesk.AutoCAD.Runtime.AIUtils
             if(action == null)
                return false;
             Document doc = Application.DocumentManager.MdiActiveDocument;
-            return (!document || doc != null)
-               && (!quiescent || doc.Editor.IsQuiescent);
+            return doc == null ? !document : !quiescent || doc.Editor.IsQuiescent;
          }
 
          void idle(object sender, EventArgs e)
