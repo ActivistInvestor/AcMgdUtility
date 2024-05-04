@@ -14,17 +14,19 @@ using System;
 using System.Diagnostics;
 using Autodesk.AutoCAD.ApplicationServices;
 using Autodesk.AutoCAD.Ribbon;
+using Autodesk.AutoCAD.Runtime.AIUtils;
 using Autodesk.Windows;
 
-namespace Autodesk.AutoCAD.Runtime.AIUtils
+namespace Autodesk.AutoCAD.ApplicationServices.AIUtils
 {
    /// <summary>
-   /// This class provides all of the functionality of the
-   /// RibbonExtensionApplication class without requiring an 
-   /// IExtensionApplication to be defined. 
+   /// This class provides the functionality of the 
+   /// RibbonExtensionApplication class without requiring 
+   /// an IExtensionApplication to be defined. 
    /// 
-   /// Instead, a single event can be handled to be notified 
-   /// whenever it is necessary to add content to the ribbon.
+   /// Instead, it exposes a single event can be handled 
+   /// to be notified whenever it is necessary to add or
+   /// refresh ribbon content.
    /// 
    /// The InitializeRibbon event:
    /// 
@@ -53,7 +55,6 @@ namespace Autodesk.AutoCAD.Runtime.AIUtils
    ///         RibbonEventManager.InitializeRibbon += LoadRibbonContent;
    ///      }
    ///      
-   ///      // Handler for the InitializeRibbon event:
    ///      private void LoadRibbonContent(object sender, RibbonStateEventArgs e)
    ///      {
    ///         // TODO: Add content to ribbon.
@@ -64,28 +65,31 @@ namespace Autodesk.AutoCAD.Runtime.AIUtils
    ///      }
    ///   }
    /// 
-   /// The handler for the InitializeRibbon event will be called 
-   /// whenever it is necessary to add content to the ribbon, which
-   /// includes at startup or when the ribbon is first shown, and 
-   /// when a workspace is loaded.
-   /// 
    /// </code>
+   /// 
+   /// The handler for the InitializeRibbon event will be 
+   /// called whenever it is necessary to add content to 
+   /// the ribbon, which includes:
+   ///   
+   ///   1. At startup if the ribbon exists.
+   ///   2. When the ribbon is first created and shown.
+   ///   3. When a workspace is loaded.
+   /// 
+   /// The State property of the event argument indicates
+   /// which of the these three conditions triggered the
+   /// event.
    /// 
    /// </summary>
 
    public static class RibbonEventManager
    {
-      
+
+      static DocumentCollection docs = Application.DocumentManager;
       static bool initialized = false;
       static event RibbonStateEventHandler initializeRibbon;
       static bool observingWorkspaceLoaded = false;
 
       static RibbonEventManager()
-      {
-         IdleAction<int>.OnIdle((i) => InitializeAsync(), 0);
-      }
-
-      static void InitializeAsync()
       {
          if(RibbonControl != null)
             Initialize(RibbonState.Active);
@@ -97,21 +101,14 @@ namespace Autodesk.AutoCAD.Runtime.AIUtils
       {
          Debug.Assert(!initialized);
          RaiseInitializeRibbonEvent(state);
-         if(!observingWorkspaceLoaded)
-         {
-            RibbonPaletteSet.WorkspaceLoaded += workspaceLoaded;
-            observingWorkspaceLoaded = true;
-         }
+         RibbonPaletteSet.WorkspaceLoaded += workspaceLoaded;
          initialized = true;
       }
 
       private static void ribbonPaletteSetCreated(object sender, EventArgs e)
       {
          RibbonServices.RibbonPaletteSetCreated -= ribbonPaletteSetCreated;
-         if(Application.DocumentManager.IsApplicationContext)
-            Initialize(RibbonState.Initalizing);
-         else
-            IdleAction<int>.OnIdle((i) => Initialize(RibbonState.Active), 0);
+         Initialize(RibbonState.Initalizing);
       }
 
       private static void workspaceLoaded(object sender, EventArgs e)
@@ -121,12 +118,18 @@ namespace Autodesk.AutoCAD.Runtime.AIUtils
 
       static void RaiseInitializeRibbonEvent(RibbonState state)
       {
-         if(Application.DocumentManager.IsApplicationContext)
-            initializeRibbon(RibbonPaletteSet, new RibbonStateEventArgs(state));
-         else
-            IdleAction<int>.OnIdle((i) => initializeRibbon(RibbonPaletteSet,
-               new RibbonStateEventArgs(state)), 0);
+         if(initializeRibbon != null)
+         {
+            InvokeInApplicationContext(() =>
+               initializeRibbon(RibbonPaletteSet,
+                  new RibbonStateEventArgs(state)));
+         }
       }
+
+      /// <summary>
+      /// If a handler is added to this event and the ribbon
+      /// exists, the handler will be invoked immediately.
+      /// </summary>
 
       public static event RibbonStateEventHandler InitializeRibbon
       {
@@ -137,18 +140,18 @@ namespace Autodesk.AutoCAD.Runtime.AIUtils
 
             if(initialized)
             {
-               IdleAction.OnIdle((handler) =>
+               docs.InvokeInApplicationContext(() =>
                {
-                  handler(RibbonPaletteSet, new RibbonStateEventArgs(RibbonState.Active));
-                  initializeRibbon += handler;
-               }, value);
+                  value(RibbonPaletteSet, new RibbonStateEventArgs(RibbonState.Active));
+                  initializeRibbon += value;
+               });
             }
             else
             {
                initializeRibbon += value;
             }
          }
-         remove 
+         remove
          {
             initializeRibbon -= value;
          }
@@ -166,87 +169,151 @@ namespace Autodesk.AutoCAD.Runtime.AIUtils
       static RibbonControl RibbonControl =>
          RibbonPaletteSet?.RibbonControl;
 
+
+
       /// <summary>
-      /// Used to ensure that ribbon-related code 
-      /// always executes in the application context.
+      /// Indicates if an action can execute based on
+      /// the specified conditions.
+      /// <param name="action">The action to execute</param>
+      /// <param name="document">A value indicating if an 
+      /// active document is required to execute the action</param>
+      /// <param name="quiescent">A value indicating if a
+      /// quiescent active document is required to execute
+      /// the action</param>
       /// </summary>
-      /// <typeparam name="T"></typeparam>
 
-      class IdleAction<T>
+      public static bool CanInvoke(bool quiescent = false, bool document = true)
       {
-         Action<T> action;
-         T parameter;
-         
-         public IdleAction(Action<T> action, T parameter)
-         {
-            this.action = action;
-            this.parameter = parameter;
-            Application.Idle += idle;
-         }
+         return docs.MdiActiveDocument == null ? !document
+            : !quiescent || docs.MdiActiveDocument.Editor.IsQuiescent;
+      }
 
-         public static IdleAction<T> OnIdle(Action<T> action, T parameter)
+      /// Excerprted from DocumentCollectionExtensions class
+      /// 
+      /// <summary>
+      /// Ensures that a delegate runs in the application 
+      /// context. If this is called from the application
+      /// context, the delegate execute synchronously. 
+      /// 
+      /// If called from the document context, the delegate
+      /// runs asynchronously.
+      /// 
+      /// The caller should not rely on side-effects of the 
+      /// delegate since it may not execute until after the
+      /// call to this method returns.
+      /// </summary>
+
+      public static void InvokeInApplicationContext(Action action, bool quiescent = false, bool document = true)
+      {
+         if(CanInvoke(quiescent, document))
+            action();
+         else
+            IdleAction.OnIdle(action, document);
+      }
+
+      /// <summary>
+      /// Executes an action on a subsequent raising 
+      /// of the Application.Idle event.
+      /// </summary>
+
+      class IdleAction
+      {
+         Action action;
+         bool document;
+         bool quiescent;
+
+         /// <summary>
+         /// If document is true, execution of the action
+         /// is deferred until there is an active document.
+         /// if quiescent is true, execution of the action
+         /// is deferred until there is an active document
+         /// and it is in a quiescent state. If quiescent
+         /// is true, document is effectively-true.
+         /// 
+         /// If the quiescent and document conditions are not 
+         /// satisified, invocation of the action is retried 
+         /// in a subsequent raising of the idle event.
+         /// 
+         /// </summary>
+         /// <param name="action">The action to execute</param>
+         /// <param name="document">A value indicating if an 
+         /// active document is required to execute the action</param>
+         /// <param name="quiescent">A value indicating if a
+         /// quiescent active document is required to execute
+         /// the action</param>
+
+         IdleAction(Action action, bool quiescent = false, bool document = true)
          {
-            return new IdleAction<T>(action, parameter);
+            if(action == null)
+               throw new ArgumentNullException(nameof(action));
+            this.action = action;
+            this.quiescent = quiescent;
+            this.document = document || quiescent;
+            Application.Idle += idle;
          }
 
          void idle(object sender, EventArgs e)
          {
-            if(action != null && Application.DocumentManager.MdiActiveDocument != null)
+            if(CanInvoke(quiescent, document))
             {
                Application.Idle -= idle;
-               action(parameter);
+               action();
                action = null;
             }
          }
+
+         public static void OnIdle(Action action, bool quiescent = false, bool document = true)
+         {
+            new IdleAction(action, quiescent, document);
+         }
       }
 
-   }
-
-   /// <summary>
-   /// Indicates the context in which InitializeRibbon() is called.
-   /// </summary>
-
-   public enum RibbonState
-   {
       /// <summary>
-      /// The ribbon exists but was not 
-      /// previously-initialized.
+      /// Indicates the context in which InitializeRibbon() is called.
       /// </summary>
-      Active = 0,
 
-      /// <summary>
-      /// The ribbon was just created.
-      /// </summary>
-      Initalizing = 1,
-
-      /// <summary>
-      /// The ribbon exists and was previously
-      /// initialized, and a workspace was just
-      /// loaded, requiring application-provided
-      /// ribbon content to be added again.
-      /// </summary>
-      WorkspaceLoaded = 2,
-
-      /// <summary>
-      /// Indicates that ribbon content should be
-      /// reloaded for unspecified reasons.
-      /// </summary>
-      RefreshContent = 3
-   }
-
-   public delegate void RibbonStateEventHandler(object sender, RibbonStateEventArgs e);
-
-   public class RibbonStateEventArgs : EventArgs
-   {
-      public RibbonStateEventArgs(RibbonState state)
+      public enum RibbonState
       {
-         this.State = state;
-      }
-      public RibbonState State { get; private set; }
-      public RibbonPaletteSet RibbonPaletteSet =>
-         RibbonServices.RibbonPaletteSet;
-      public RibbonControl RibbonControl =>
-         RibbonPaletteSet?.RibbonControl;
-   }
+         /// <summary>
+         /// The ribbon exists but was not 
+         /// previously-initialized.
+         /// </summary>
+         Active = 0,
 
+         /// <summary>
+         /// The ribbon was just created.
+         /// </summary>
+         Initalizing = 1,
+
+         /// <summary>
+         /// The ribbon exists and was previously
+         /// initialized, and a workspace was just
+         /// loaded, requiring application-provided
+         /// ribbon content to be added again.
+         /// </summary>
+         WorkspaceLoaded = 2,
+
+         /// <summary>
+         /// Indicates that ribbon content should be
+         /// reloaded for unspecified reasons.
+         /// </summary>
+         RefreshContent = 3
+      }
+
+      public delegate void RibbonStateEventHandler(object sender, RibbonStateEventArgs e);
+
+      public class RibbonStateEventArgs : EventArgs
+      {
+         public RibbonStateEventArgs(RibbonState state)
+         {
+            this.State = state;
+         }
+         public RibbonState State { get; private set; }
+         public RibbonPaletteSet RibbonPaletteSet =>
+            RibbonServices.RibbonPaletteSet;
+         public RibbonControl RibbonControl =>
+            RibbonPaletteSet?.RibbonControl;
+      }
+
+   }
 }
