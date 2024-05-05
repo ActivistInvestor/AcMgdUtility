@@ -45,11 +45,11 @@ namespace Autodesk.AutoCAD.Runtime
       /// While arrays support IList<T>, they cannot be expanded.
       /// </summary>
 
-      static IList<TypedValue> CheckIsFixedSize(IList<TypedValue> list)
+      static IList<T> CheckIsFixedSize<T>(IList<T> list)
       {
          if(list == null)
             throw new ArgumentNullException(nameof(list));
-         if(list is TypedValue[] || list.IsReadOnly)
+         if(list is T[] || list.IsReadOnly)
             throw new InvalidOperationException("the collection is read-only or not expandable");
          return list;
       }
@@ -151,9 +151,11 @@ namespace Autodesk.AutoCAD.Runtime
          CheckIsFixedSize(list);
          if(args == null)
             throw new ArgumentNullException(nameof(args));
-         AddRange(list, args.Select(arg => new TypedValue(arg.code, arg.value)));
+         if(args.Length > 0)
+         {
+            AddRange(list, args.ToTypedValues());
+         }
       }
-
 
       /// <summary>
       /// Adds a range of elements all having the same 
@@ -431,7 +433,7 @@ namespace Autodesk.AutoCAD.Runtime
          int next = list.IndexOfLast(predicate);
          if(next > -1 && next < list.Count - 1)
          {
-            for(int i = next; i < list.Count; i++)
+            for(int i = next + 1; i < list.Count; i++)
                yield return list[i];
          }
       }
@@ -665,23 +667,10 @@ namespace Autodesk.AutoCAD.Runtime
       {
          if(list == null)
             throw new ArgumentNullException(nameof(list));
-         List<T>? implist = list as List<T>;
-         if(implist != null)
+         for(int i = 0; i < list.Count; i++)
          {
-            var span = CollectionsMarshal.AsSpan(implist);
-            for(int i = 0; i < list.Count; i++)
-            {
-               if(predicate(span[i]))
-                  yield return i;
-            }
-         }
-         else
-         {
-            for(int i = 0; i < list.Count; i++)
-            {
-               if(predicate(list[i]))
-                  yield return i;
-            }
+            if(predicate(list[i]))
+               yield return i;
          }
       }
 
@@ -770,6 +759,29 @@ namespace Autodesk.AutoCAD.Runtime
          }
       }
 
+      /// <summary>
+      /// Converts the target to a new Xrecord;
+      /// </summary>
+
+      public static Xrecord ToXrecord(this IList<TypedValue> list)
+      {
+         if(list == null)
+            throw new ArgumentNullException(nameof(list));
+         Xrecord xrecord = new Xrecord();
+         xrecord.Data = new ResultBuffer(list.AsArray());
+         return xrecord;
+      }
+
+      /// <summary>
+      /// Returns the argument if it is an 
+      /// array, or converts to an array. 
+      /// </summary>
+
+      public static T[] AsArray<T>(this IEnumerable<T> source)
+      {
+         return source as T[] ?? source.ToArray();
+      }
+
       public static string ToString(this IList<TypedValue> list)
       {
          return ToString<DxfCode>(list);
@@ -799,18 +811,20 @@ namespace Autodesk.AutoCAD.Runtime
       /// <summary>
       /// Creates an XRecord containing the specified sequence
       /// of ObjectIds as hard/soft owner/pointer references,
-      /// according to the specified DxfCode.
+      /// according to the specified DxfCode. The default is
+      /// DxfCode.SoftPointerId.
       /// 
       /// This version is somewhat faster than the version 
       /// that takes an IEnumerable<T>, because it avoids 
-      /// using LINQ, which is not really appropriate when
-      /// dealing with collections of determinant size:
+      /// use of LINQ, which is not recommended for dealing 
+      /// with conversion of collections of determinant size.
       /// </summary>
       /// <param name="ids">The ObjectIds to store in the Xrecord</param>
       /// <param name="code">The dxf code to assign to each element</param>
       /// <returns>An Xrecord containing the given ObjectIds</returns>
 
-      public static Xrecord ToXrecord(this ObjectIdCollection ids, short code = 330)
+      public static Xrecord ToXrecord(this ObjectIdCollection ids, 
+         short code = 330, bool xlateReferences = true)
       {
          if(ids == null)
             throw new ArgumentNullException(nameof(ids));
@@ -818,7 +832,7 @@ namespace Autodesk.AutoCAD.Runtime
          for(int i = 0; i < array.Length; i++)
             array[i] = new TypedValue(code, ids[i]);
          Xrecord xrecord = new Xrecord();
-         xrecord.XlateReferences = true;
+         xrecord.XlateReferences = xlateReferences;
          xrecord.Data = new ResultBuffer(array);
          return xrecord;
       }
@@ -831,16 +845,66 @@ namespace Autodesk.AutoCAD.Runtime
       /// <param name="code">The dxf code to assign to each element</param>
       /// <returns>An Xrecord containing the given ObjectIds</returns>
 
-      public static Xrecord ToXrecord(this IEnumerable<ObjectId> ids, short code = 330)
+      public static Xrecord ToXrecord(this IEnumerable<ObjectId> ids,
+         short code = 330, bool xlateReferences = true)
       {
          TypedValueList list = new TypedValueList();
          list.AddRange(code, ids);
          Xrecord xrecord = new Xrecord();
-         xrecord.XlateReferences = true;
+         xrecord.XlateReferences = xlateReferences;
          xrecord.Data = list;
          return xrecord;
       }
 
+      /// <summary>
+      /// Extensions targeting ValueTuple(short/DxfCode.LispDataType, object)
+      /// that convert those types to one or more TypedValues.
+      /// </summary>
+
+      public static TypedValue ToTypedValue(this (short code, object value) item)
+      {
+         return new TypedValue(item.code, item.value);
+      }
+
+      public static TypedValue[] ToTypedValues(this (short code, object value)[] items)
+      {
+         if(items == null)
+            throw new ArgumentNullException(nameof(items));
+         TypedValue[] array = new TypedValue[items.Length];
+         for(int i = 0; i < items.Length; i++)
+            array[i] = items[i].ToTypedValue();
+         return array;
+      }
+
+      public static TypedValue ToTypedValue(this (DxfCode code, object value) item)
+      {
+         return new TypedValue((short) item.code, item.value);
+      }
+
+      public static TypedValue[] ToTypedValues(this (DxfCode code, object value)[] items)
+      {
+         if(items == null)
+            throw new ArgumentNullException(nameof(items));
+         TypedValue[] array = new TypedValue[items.Length];
+         for(int i = 0; i < items.Length; i++)
+            array[i] = items[i].ToTypedValue();
+         return array;
+      }
+
+      public static TypedValue ToTypedValue(this (LispDataType code, object value) item)
+      {
+         return new TypedValue((short)item.code, item.value);
+      }
+
+      public static TypedValue[] ToTypedValues(this (LispDataType code, object value)[] items)
+      {
+         if(items == null)
+            throw new ArgumentNullException(nameof(items));
+         TypedValue[] array = new TypedValue[items.Length];
+         for(int i = 0; i < items.Length; i++)
+            array[i] = items[i].ToTypedValue();
+         return array;
+      }
    }
 
    public interface ITypedValueList : IReadOnlyList<object>
@@ -873,6 +937,10 @@ namespace Autodesk.AutoCAD.Runtime
 
       public int Count => source.Count;
 
+      /// <summary>
+      /// Enumerates the objects, rather than the TypedValues
+      /// </summary>
+
       public IEnumerator<object> GetEnumerator()
       {
          return source.Select(tv => tv.Value).GetEnumerator();
@@ -883,8 +951,9 @@ namespace Autodesk.AutoCAD.Runtime
          return this.GetEnumerator();
       }
 
-   }
 
+
+   }
 
 
 }
