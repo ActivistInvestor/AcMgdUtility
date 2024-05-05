@@ -171,9 +171,9 @@ namespace Autodesk.AutoCAD.Runtime
       ///    
       /// Which is equivlaent to
       /// 
-      ///    list.Add(DxfCode.Text, "Moe");
-      ///    list.Add(DxfCode.Text, "Larry");
-      ///    list.Add(DxfCode.Text, "Curly");
+      ///    list.Add(new TypedValue((short) DxfCode.Text, "Moe")));
+      ///    list.Add(new TypedValue((short) DxfCode.Text, "Larry")));
+      ///    list.Add(new TypedValue((short) DxfCode.Text, "Curly")));
       ///    
       /// </code>
       /// 
@@ -229,7 +229,7 @@ namespace Autodesk.AutoCAD.Runtime
       /// <summary>
       /// Gets an instance of an interface type that
       /// provides direct access to the value of each
-      /// TypedValue element in the list, via an indexer.
+      /// TypedValue element in the list via an indexer.
       /// 
       /// For example:
       /// <code>
@@ -257,7 +257,7 @@ namespace Autodesk.AutoCAD.Runtime
       
       public static ITypedValueList GetValueList(this IList<TypedValue> list)
       {
-         return new ImpTypedValueList(list);
+         return new ValueList(list);
       }
 
       /// <summary>
@@ -779,11 +779,15 @@ namespace Autodesk.AutoCAD.Runtime
 
       public static T[] AsArray<T>(this IEnumerable<T> source)
       {
+         if(source == null) 
+            throw new ArgumentNullException(nameof(source));
          return source as T[] ?? source.ToArray();
       }
 
       public static string ToString(this IList<TypedValue> list)
       {
+         if(list == null)
+            throw new ArgumentNullException(nameof(list));
          return ToString<DxfCode>(list);
       }
 
@@ -848,6 +852,8 @@ namespace Autodesk.AutoCAD.Runtime
       public static Xrecord ToXrecord(this IEnumerable<ObjectId> ids,
          short code = 330, bool xlateReferences = true)
       {
+         if(ids == null)
+            throw new ArgumentNullException(nameof(ids));
          TypedValueList list = new TypedValueList();
          list.AddRange(code, ids);
          Xrecord xrecord = new Xrecord();
@@ -910,17 +916,24 @@ namespace Autodesk.AutoCAD.Runtime
    public interface ITypedValueList : IReadOnlyList<object>
    {
       public new object this[int index] { get; set; }
+      public short GetTypeCodeAt(int index);
+      public void SetTypeCodeAt(int index, short value);
    }
 
-   class ImpTypedValueList : ITypedValueList
+   class ValueList : ITypedValueList
    {
       private readonly IList<TypedValue> source;
 
-      public ImpTypedValueList(IList<TypedValue> source)
+      internal ValueList(IList<TypedValue> source)
       {
          if(source == null)
             throw new ArgumentNullException(nameof(source));
          this.source = source;
+      }
+
+      object IReadOnlyList<object>.this[int index]
+      {
+         get { return source[index].Value; }
       }
 
       public object this[int index]
@@ -937,6 +950,16 @@ namespace Autodesk.AutoCAD.Runtime
 
       public int Count => source.Count;
 
+      public short GetTypeCodeAt(int index)
+      {
+         return source[index].TypeCode;
+      }
+
+      public void SetTypeCodeAt(int index, short value)
+      {
+         source[index] = new TypedValue(value, source[index].Value);
+      }
+
       /// <summary>
       /// Enumerates the objects, rather than the TypedValues
       /// </summary>
@@ -950,9 +973,6 @@ namespace Autodesk.AutoCAD.Runtime
       {
          return this.GetEnumerator();
       }
-
-
-
    }
 
 
