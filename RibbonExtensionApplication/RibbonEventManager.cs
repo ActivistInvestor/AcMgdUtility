@@ -12,9 +12,7 @@
 
 using System;
 using System.Diagnostics;
-using Autodesk.AutoCAD.ApplicationServices;
 using Autodesk.AutoCAD.Ribbon;
-using Autodesk.AutoCAD.Runtime.AIUtils;
 using Autodesk.Windows;
 
 namespace Autodesk.AutoCAD.ApplicationServices.AIUtils
