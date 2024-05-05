@@ -57,7 +57,7 @@ namespace Autodesk.AutoCAD.ApplicationServices.AIUtils
    ///      
    ///      private void LoadRibbonContent(object sender, RibbonStateEventArgs e)
    ///      {
-   ///         // TODO: Add content to ribbon.
+   ///         // TODO: Add content to ribbon here.
    ///      }
    ///
    ///      public void Terminate()
@@ -100,9 +100,11 @@ namespace Autodesk.AutoCAD.ApplicationServices.AIUtils
       static void Initialize(RibbonState state)
       {
          Debug.Assert(!initialized);
-         RaiseInitializeRibbonEvent(state);
-         RibbonPaletteSet.WorkspaceLoaded += workspaceLoaded;
-         initialized = true;
+         RaiseInitializeRibbonEvent(state, () =>
+         {
+            RibbonPaletteSet.WorkspaceLoaded += workspaceLoaded;
+            initialized = true;
+         });
       }
 
       private static void ribbonPaletteSetCreated(object sender, EventArgs e)
@@ -116,19 +118,24 @@ namespace Autodesk.AutoCAD.ApplicationServices.AIUtils
          RaiseInitializeRibbonEvent(RibbonState.WorkspaceLoaded);
       }
 
-      static void RaiseInitializeRibbonEvent(RibbonState state)
+      static void RaiseInitializeRibbonEvent(RibbonState state, Action continutation = null)
       {
          if(initializeRibbon != null)
          {
-            InvokeInApplicationContext(() =>
+            AppContextInvoke(() =>
+            {
                initializeRibbon(RibbonPaletteSet,
-                  new RibbonStateEventArgs(state)));
+                  new RibbonStateEventArgs(state));
+            }, continutation);
          }
       }
 
       /// <summary>
       /// If a handler is added to this event and the ribbon
       /// exists, the handler will be invoked immediately.
+      /// 
+      /// Note: Adding the same event handler to this event
+      /// multiple times can lead to undefined behavior.
       /// </summary>
 
       public static event RibbonStateEventHandler InitializeRibbon
@@ -140,7 +147,7 @@ namespace Autodesk.AutoCAD.ApplicationServices.AIUtils
 
             if(initialized)
             {
-               docs.InvokeInApplicationContext(() =>
+               AppContextInvoke(() =>
                {
                   value(RibbonPaletteSet, new RibbonStateEventArgs(RibbonState.Active));
                   initializeRibbon += value;
@@ -169,6 +176,8 @@ namespace Autodesk.AutoCAD.ApplicationServices.AIUtils
       static RibbonControl RibbonControl =>
          RibbonPaletteSet?.RibbonControl;
 
+      static bool IsAppContext => docs.IsApplicationContext;
+
 
 
       /// <summary>
@@ -188,32 +197,47 @@ namespace Autodesk.AutoCAD.ApplicationServices.AIUtils
             : !quiescent || docs.MdiActiveDocument.Editor.IsQuiescent;
       }
 
-      /// Excerprted from DocumentCollectionExtensions class
+      /// Helper classes excerpted from the
+      /// DocumentCollectionExtensions class
       /// 
       /// <summary>
       /// Ensures that a delegate runs in the application 
-      /// context. If this is called from the application
-      /// context, the delegate execute synchronously. 
-      /// 
-      /// If called from the document context, the delegate
-      /// runs asynchronously.
+      /// context. If called from the application context, 
+      /// the delegate executes synchronously. If called 
+      /// from the document context, the delegate will run
+      /// asynchronously at a point after the call returns.
       /// 
       /// The caller should not rely on side-effects of the 
-      /// delegate since it may not execute until after the
+      /// delegate because it may not execute until after the
       /// call to this method returns.
       /// </summary>
 
-      public static void InvokeInApplicationContext(Action action, bool quiescent = false, bool document = true)
+      public static void AppContextInvoke(Action action, bool quiescent = false, bool document = true)
       {
-         if(CanInvoke(quiescent, document))
+         AppContextInvoke(action, null, quiescent, document);
+      }
+      
+      public static void AppContextInvoke(Action action, Action continuation,
+         bool quiescent = false, bool document = true)
+      {
+         if(IsAppContext && CanInvoke(quiescent, document))
+         {
             action();
+            continuation?.Invoke();
+         }
          else
-            IdleAction.OnIdle(action, document);
+         {
+            IdleAction.OnIdle(() =>
+            {
+               action();
+               continuation?.Invoke();
+            }, quiescent, document);
+         }
       }
 
       /// <summary>
-      /// Executes an action on a subsequent raising 
-      /// of the Application.Idle event.
+      /// Conditionally executes an action on a subsequent 
+      /// raising of the Application.Idle event.
       /// </summary>
 
       class IdleAction
@@ -269,7 +293,8 @@ namespace Autodesk.AutoCAD.ApplicationServices.AIUtils
       }
 
       /// <summary>
-      /// Indicates the context in which InitializeRibbon() is called.
+      /// Indicates the context in which the 
+      /// InitializeRibbon event is raised.
       /// </summary>
 
       public enum RibbonState
