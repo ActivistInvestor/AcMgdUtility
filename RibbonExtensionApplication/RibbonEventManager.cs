@@ -125,8 +125,8 @@ namespace Autodesk.AutoCAD.ApplicationServices.AIUtils
       }
 
       /// <summary>
-      /// If a handler is added to this event and the ribbon
-      /// exists, the handler will be invoked immediately.
+      /// If a handler is added to this event and the ribbon exists,
+      /// the handler will be invoked on the next Idle event.
       /// 
       /// Note: Adding the same event handler to this event
       /// multiple times can lead to undefined behavior.
@@ -191,41 +191,6 @@ namespace Autodesk.AutoCAD.ApplicationServices.AIUtils
       {
          return docs.MdiActiveDocument == null ? !document
             : !quiescent || docs.MdiActiveDocument.Editor.IsQuiescent;
-      }
-
-      /// <summary>
-      /// Ensures that a delegate runs in the application 
-      /// context. If called from the application context, 
-      /// the delegate executes synchronously. If called 
-      /// from the document context, the delegate will run
-      /// asynchronously at a point after the call returns.
-      /// 
-      /// The caller should not rely on side-effects of the 
-      /// delegate because it may not execute until after the
-      /// call to this method returns.
-      /// </summary>
-
-      public static void AppContextInvoke(Action action, bool quiescent = false, bool document = true)
-      {
-         AppContextInvoke(action, null, quiescent, document);
-      }
-      
-      public static void AppContextInvoke(Action action, Action continuation,
-         bool quiescent = false, bool document = true)
-      {
-         if(IsAppContext && CanInvoke(quiescent, document))
-         {
-            action();
-            continuation?.Invoke();
-         }
-         else
-         {
-            IdleAction.OnIdle(() =>
-            {
-               action();
-               continuation?.Invoke();
-            }, quiescent, document);
-         }
       }
 
       /// <summary>
