@@ -7,44 +7,44 @@
 /// 
 /// Source:
 ///   
-///   https://github.com/ActivistInvestor/AcMgdUtility/blob/main/RibbonExtensionApplication/RibbonEventManager.cs
+///   https://github.com/ActivistInvestor/AcMgdUtility/blob/main/RibbonExtensionApplication/Examples/RibbonEventManagerExample.cs
 ///
 
+using Autodesk.AutoCAD.ApplicationServices.AIUtils;
 using Autodesk.AutoCAD.Runtime;
 using Autodesk.Windows;
 
-namespace Autodesk.AutoCAD.ApplicationServices.AIUtils
+namespace MyRibbonEventManagerExample
 {
-   public static partial class RibbonEventManager
+   public class MyRibbonEventManagerApplication : IExtensionApplication
    {
-      public class MyRibbonEventManagerApplication : IExtensionApplication
+      static RibbonTab myRibbonTab;
+
+      public void Initialize()
       {
-         static RibbonTab myRibbonTab;
+         /// Create a RibbonTab and store it in a 
+         /// static member. The ribbon tab must be 
+         /// created before adding a handler to the 
+         /// InitializeRibbon event:
 
-         public void Initialize()
-         {
-            /// Create a RibbonTab and store it
-            /// in a static member:
+         myRibbonTab = new RibbonTab();
+         myRibbonTab.Id = "IDMyTab001";
+         myRibbonTab.Name = "MyRibbonTab";
 
-            myRibbonTab = new RibbonTab();
-            myRibbonTab.Id = "IDMyTab001";
-            myRibbonTab.Name = "MyRibbonTab";
-
-            /// Add a handler to the InitializeRibbon event:
-            RibbonEventManager.InitializeRibbon += LoadRibbonContent;
-         }
-
-         private void LoadRibbonContent(object sender, RibbonStateEventArgs e)
-         {
-            // Add the RibbonTab to the Ribbon:
-
-            e.RibbonControl.Tabs.Add(myRibbonTab);
-         }
-
-         public void Terminate()
-         {
-         }
+         /// Add a handler to the InitializeRibbon event:
+         RibbonEventManager.InitializeRibbon += LoadRibbonContent;
       }
 
+      private void LoadRibbonContent(object sender, RibbonStateEventArgs e)
+      {
+         // Add the RibbonTab to the Ribbon:
+
+         e.RibbonControl.Tabs.Add(myRibbonTab);
+      }
+
+      public void Terminate()
+      {
+      }
    }
+
 }
