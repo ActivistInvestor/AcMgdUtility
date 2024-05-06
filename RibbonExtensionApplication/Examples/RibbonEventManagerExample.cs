@@ -1,4 +1,7 @@
-﻿/// RibbonEventManager.cs
+﻿
+using Autodesk.AutoCAD.Runtime;
+
+/// RibbonEventManager.cs
 /// ActivistInvestor / Tony T
 /// 
 /// A class that provides a simplified means of 
@@ -10,11 +13,15 @@
 ///   https://github.com/ActivistInvestor/AcMgdUtility/blob/main/RibbonExtensionApplication/Examples/RibbonEventManagerExample.cs
 ///
 
+/// TODO: Modify argument to be the name of 
+/// the actual IExtensionApplication-based class:
+
+/// [assembly: ExtensionApplication(typeof(Namespace1.MyRibbonEventManagerApplication))]
+
 using Autodesk.AutoCAD.ApplicationServices.AIUtils;
-using Autodesk.AutoCAD.Runtime;
 using Autodesk.Windows;
 
-namespace MyRibbonEventManagerExample
+namespace Namespace1
 {
    public class MyRibbonEventManagerApplication : IExtensionApplication
    {
