@@ -79,13 +79,12 @@ namespace Autodesk.AutoCAD.ApplicationServices.AIUtils
    /// 
    /// </summary>
 
-   public static class RibbonEventManager
+   public static partial class RibbonEventManager
    {
 
       static DocumentCollection docs = Application.DocumentManager;
       static bool initialized = false;
       static event RibbonStateEventHandler initializeRibbon;
-      static bool observingWorkspaceLoaded = false;
 
       static RibbonEventManager()
       {
@@ -93,6 +92,12 @@ namespace Autodesk.AutoCAD.ApplicationServices.AIUtils
             Initialize(RibbonState.Active);
          else
             RibbonServices.RibbonPaletteSetCreated += ribbonPaletteSetCreated;
+      }
+
+      private static void ribbonPaletteSetCreated(object sender, EventArgs e)
+      {
+         RibbonServices.RibbonPaletteSetCreated -= ribbonPaletteSetCreated;
+         Initialize(RibbonState.Initalizing);
       }
 
       static void Initialize(RibbonState state)
@@ -105,27 +110,18 @@ namespace Autodesk.AutoCAD.ApplicationServices.AIUtils
          });
       }
 
-      private static void ribbonPaletteSetCreated(object sender, EventArgs e)
-      {
-         RibbonServices.RibbonPaletteSetCreated -= ribbonPaletteSetCreated;
-         Initialize(RibbonState.Initalizing);
-      }
-
       private static void workspaceLoaded(object sender, EventArgs e)
       {
          RaiseInitializeRibbonEvent(RibbonState.WorkspaceLoaded);
       }
 
-      static void RaiseInitializeRibbonEvent(RibbonState state, Action continutation = null)
+      static void RaiseInitializeRibbonEvent(RibbonState state, Action continuation = null)
       {
-         if(initializeRibbon != null)
+         IdleAction.OnIdle(() =>
          {
-            AppContextInvoke(() =>
-            {
-               initializeRibbon(RibbonPaletteSet,
-                  new RibbonStateEventArgs(state));
-            }, continutation);
-         }
+            initializeRibbon?.Invoke(RibbonPaletteSet, new RibbonStateEventArgs(state));
+            continuation?.Invoke();
+         });
       }
 
       /// <summary>
@@ -145,7 +141,7 @@ namespace Autodesk.AutoCAD.ApplicationServices.AIUtils
 
             if(initialized)
             {
-               AppContextInvoke(() =>
+               IdleAction.OnIdle(() =>
                {
                   value(RibbonPaletteSet, new RibbonStateEventArgs(RibbonState.Active));
                   initializeRibbon += value;
@@ -177,7 +173,9 @@ namespace Autodesk.AutoCAD.ApplicationServices.AIUtils
       static bool IsAppContext => docs.IsApplicationContext;
 
 
-
+      /// Helper classes excerpted from the
+      /// DocumentCollectionExtensions class
+      /// 
       /// <summary>
       /// Indicates if an action can execute based on
       /// the specified conditions.
@@ -195,9 +193,6 @@ namespace Autodesk.AutoCAD.ApplicationServices.AIUtils
             : !quiescent || docs.MdiActiveDocument.Editor.IsQuiescent;
       }
 
-      /// Helper classes excerpted from the
-      /// DocumentCollectionExtensions class
-      /// 
       /// <summary>
       /// Ensures that a delegate runs in the application 
       /// context. If called from the application context, 
@@ -254,7 +249,7 @@ namespace Autodesk.AutoCAD.ApplicationServices.AIUtils
          /// 
          /// If the quiescent and document conditions are not 
          /// satisified, invocation of the action is retried 
-         /// in a subsequent raising of the idle event.
+         /// on the next raising of the idle event.
          /// 
          /// </summary>
          /// <param name="action">The action to execute</param>
