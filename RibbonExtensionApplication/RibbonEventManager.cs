@@ -55,7 +55,10 @@ namespace Autodesk.AutoCAD.ApplicationServices.AIUtils
    ///      
    ///      private void LoadRibbonContent(object sender, RibbonStateEventArgs e)
    ///      {
-   ///         // TODO: Add content to ribbon here.
+   ///         // Here, you can safely assume
+   ///         // that the ribbon exists.
+   ///         
+   ///         // TODO: Add content to ribbon.
    ///      }
    ///
    ///      public void Terminate()
@@ -70,7 +73,10 @@ namespace Autodesk.AutoCAD.ApplicationServices.AIUtils
    /// the ribbon, which includes:
    ///   
    ///   1. At startup if the ribbon exists.
-   ///   2. When the ribbon is first created and shown.
+   ///   
+   ///   2. When the ribbon is first created and
+   ///      shown (if it did not exist at startup).
+   ///      
    ///   3. When a workspace is loaded.
    /// 
    /// The State property of the event argument indicates
@@ -79,7 +85,7 @@ namespace Autodesk.AutoCAD.ApplicationServices.AIUtils
    /// 
    /// </summary>
 
-   public static partial class RibbonEventManager
+   public static class RibbonEventManager
    {
 
       static DocumentCollection docs = Application.DocumentManager;
@@ -94,25 +100,13 @@ namespace Autodesk.AutoCAD.ApplicationServices.AIUtils
             RibbonServices.RibbonPaletteSetCreated += ribbonPaletteSetCreated;
       }
 
-      private static void ribbonPaletteSetCreated(object sender, EventArgs e)
-      {
-         RibbonServices.RibbonPaletteSetCreated -= ribbonPaletteSetCreated;
-         Initialize(RibbonState.Initalizing);
-      }
-
       static void Initialize(RibbonState state)
       {
-         Debug.Assert(!initialized);
          RaiseInitializeRibbonEvent(state, () =>
          {
             RibbonPaletteSet.WorkspaceLoaded += workspaceLoaded;
             initialized = true;
          });
-      }
-
-      private static void workspaceLoaded(object sender, EventArgs e)
-      {
-         RaiseInitializeRibbonEvent(RibbonState.WorkspaceLoaded);
       }
 
       static void RaiseInitializeRibbonEvent(RibbonState state, Action continuation = null)
@@ -124,12 +118,24 @@ namespace Autodesk.AutoCAD.ApplicationServices.AIUtils
          });
       }
 
+      private static void ribbonPaletteSetCreated(object sender, EventArgs e)
+      {
+         RibbonServices.RibbonPaletteSetCreated -= ribbonPaletteSetCreated;
+         Initialize(RibbonState.Initalizing);
+      }
+
+      private static void workspaceLoaded(object sender, EventArgs e)
+      {
+         if(initializeRibbon != null)
+            RaiseInitializeRibbonEvent(RibbonState.WorkspaceLoaded);
+      }
+
       /// <summary>
       /// If a handler is added to this event and the ribbon exists,
       /// the handler will be invoked on the next Idle event.
       /// 
       /// Note: Adding the same event handler to this event
-      /// multiple times can lead to undefined behavior.
+      /// multiple times will result in undefined behavior.
       /// </summary>
 
       public static event RibbonStateEventHandler InitializeRibbon
@@ -161,17 +167,11 @@ namespace Autodesk.AutoCAD.ApplicationServices.AIUtils
       static Document Document =>
          Application.DocumentManager.MdiActiveDocument;
 
-      static bool IsQuiescent =>
-         Document?.Editor.IsQuiescent == true;
-
       static RibbonPaletteSet RibbonPaletteSet =>
          RibbonServices.RibbonPaletteSet;
 
       static RibbonControl RibbonControl =>
          RibbonPaletteSet?.RibbonControl;
-
-      static bool IsAppContext => docs.IsApplicationContext;
-
 
       /// Helper classes excerpted from the
       /// DocumentCollectionExtensions class
@@ -203,6 +203,7 @@ namespace Autodesk.AutoCAD.ApplicationServices.AIUtils
          Action action;
          bool document;
          bool quiescent;
+         Document targetDocument;
 
          /// <summary>
          /// If document is true, execution of the action
@@ -231,12 +232,25 @@ namespace Autodesk.AutoCAD.ApplicationServices.AIUtils
             this.action = action;
             this.quiescent = quiescent;
             this.document = document || quiescent;
+            this.targetDocument = docs.MdiActiveDocument;
             Application.Idle += idle;
          }
 
          void idle(object sender, EventArgs e)
          {
-            if(CanInvoke(quiescent, document))
+            if(action == null)
+            {
+               Application.Idle -= idle;
+            }
+            else if(document && docs.MdiActiveDocument != targetDocument)
+            {
+               if(targetDocument?.IsDisposed == true)
+               {
+                  Application.Idle -= idle;
+                  action = null;
+               }
+            }
+            else if(CanInvoke(quiescent, document))
             {
                Application.Idle -= idle;
                action();
