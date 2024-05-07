@@ -1,12 +1,11 @@
 ﻿
 using Autodesk.AutoCAD.Runtime;
 
-/// RibbonEventManager.cs
+/// RibbonEventManagerExample.cs
 /// ActivistInvestor / Tony T
 /// 
-/// A class that provides a simplified means of 
-/// initializing and managing application-provided
-/// content added to AutoCAD's ribbon.
+/// An example showing the use of the 
+/// RibbonEventManager class.
 /// 
 /// Source:
 ///   
@@ -39,8 +38,31 @@ namespace Namespace1
          myRibbonTab.Name = "MyRibbonTab";
 
          /// Add a handler to the InitializeRibbon event:
+         /// This should be done after ribbon content has
+         /// been created because the handler may be called
+         /// immediately after adding it to the event, if
+         /// the ribbon exists.
+         
          RibbonEventManager.InitializeRibbon += LoadRibbonContent;
       }
+
+      /// <summary>
+      /// 
+      /// This event handler will be called when:
+      /// 
+      ///   1. A handler is added to the 
+      ///      InitializeRibbonEvent and
+      ///      the ribbon exists.
+      ///      
+      ///   2. The ribbon is created at any
+      ///      point after a handler is added 
+      ///      to the InitializeRibbon event.
+      ///      
+      ///   3. A workspace is loaded.
+      ///   
+      /// </summary>
+      /// <param name="sender"></param>
+      /// <param name="e"></param>
 
       private void LoadRibbonContent(object sender, RibbonStateEventArgs e)
       {
