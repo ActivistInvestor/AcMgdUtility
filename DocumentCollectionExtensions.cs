@@ -6,6 +6,10 @@ namespace Autodesk.AutoCAD.ApplicationServices.LayoutUtils
    /// <summary>
    /// DocumentCollectionExtensions.cs:
    /// 
+   /// Source location:
+   /// 
+   ///   https://github.com/ActivistInvestor/AcMgdUtility/blob/main/DocumentCollectionExtensions.cs
+   /// 
    /// Exposes helper APIs as extension methods that
    /// target the DocumentCollection class. 
    /// 
