@@ -132,7 +132,7 @@ namespace Autodesk.AutoCAD.ApplicationServices.LayoutUtils
             if(CanInvoke(docs, quiescentRequired, documentRequired))
             {
                Application.Idle -= idle;
-               if(cancelOnDocSwitch && doc != active)
+               if(cancelOnDocSwitch && doc != active && active != null)
                   source.TrySetCanceled();
                else
                   source.TrySetResult(null);
