@@ -1,7 +1,7 @@
 ﻿using System;
 using System.Threading.Tasks;
 
-namespace Autodesk.AutoCAD.ApplicationServices.LayoutUtils
+namespace Autodesk.AutoCAD.ApplicationServices.AsyncHelpers
 {
    /// <summary>
    /// DocumentCollectionExtensions.cs:
@@ -25,8 +25,7 @@ namespace Autodesk.AutoCAD.ApplicationServices.LayoutUtils
    /// The reason is mainly due to the fact that the 
    /// asynchronous nature of these methods is implied 
    /// by the fact that their names start with "Wait".
-   /// 
-   /// I don't wanna hear it.
+   /// I don't wanna hear it ;)
    /// </summary>
 
    public static partial class DocumentCollectionExtensions
@@ -78,16 +77,9 @@ namespace Autodesk.AutoCAD.ApplicationServices.LayoutUtils
       ///       await DocMgr.WaitForIdle();
       ///       
       ///       // Code appearing here will not run until 
-      ///       // the next Idle event is raised, and there
+      ///       // the next Idle event is raised and there
       ///       // is an active document.
       ///       
-      ///       // Note:
-      ///       // Do not use a Document variable that was
-      ///       // assigned to the active document prior to 
-      ///       // a call to WaitForIdleAsync() here, because the
-      ///       // active document could have changed while 
-      ///       // waiting for the Idle event to be raised:
-      ///
       ///       var doc = DocMgr.MdiActiveDocument;       
       ///       doc.Editor.WriteMessage("An Idle event was raised.");
       ///    }
@@ -101,22 +93,14 @@ namespace Autodesk.AutoCAD.ApplicationServices.LayoutUtils
       /// method should continue to wait until there is an active 
       /// document. If this value is true and there is no active
       /// document when the Idle event is raised, the method will
-      /// not return until an Idle event is raised while there is
+      /// not return until an Idle event is raised and there is
       /// an active document.</param>
-      /// <param name="cancelOnDocSwitch">A value that indicates
-      /// if the anynchrnous operation should be cancelled if the
-      /// active document has changed from the point when this 
-      /// method was called. If this value is true, and there is
-      /// a document mismatch, an exception will be thrown.</param>
       /// <returns>A Task representing the asynchronous operation</returns>
       /// <exception cref="ArgumentNullException"></exception>
-      /// <exception cref="TaskCanceledException">Thrown if there
-      /// is a document mismatch and cancelOnDocSwitch is true</exception>
 
       public static Task WaitForIdle(this DocumentCollection docs, 
          bool quiescentRequired = false,
-         bool documentRequired = true,
-         bool cancelOnDocSwitch = false)
+         bool documentRequired = true)
       {
          if(docs == null)
             throw new ArgumentNullException(nameof(docs));
@@ -132,10 +116,7 @@ namespace Autodesk.AutoCAD.ApplicationServices.LayoutUtils
             if(CanInvoke(docs, quiescentRequired, documentRequired))
             {
                Application.Idle -= idle;
-               if(cancelOnDocSwitch && doc != active && active != null)
-                  source.TrySetCanceled();
-               else
-                  source.TrySetResult(null);
+               source.TrySetResult(null);
             }
          }
       }
@@ -144,18 +125,18 @@ namespace Autodesk.AutoCAD.ApplicationServices.LayoutUtils
       /// Takes a predicate and asynchronously waits until the
       /// predicate returns true. The predicate is evaluated
       /// immediately upon calling this method. If it returns
-      /// true, the method returns immediately, without entering
+      /// true, the method returns immediately without entering
       /// an asynchrnous wait state.
       /// 
       /// If the initial call to the predicate returns false,
       /// the predicate is evaluated every time the Idle event
-      /// is raused, and this method returns when the predicate
+      /// is raised, and this method returns when the predicate
       /// returns true.
       /// </summary>
       /// <param name="docs">The DocumentCollection</param>
       /// <param name="predicate">A delegate that returns a value
-      /// indicating if this method should return, or continue 
-      /// to wait.</param>
+      /// indicating if this method should return, or continue to
+      /// handle Idle events.</param>
       /// <returns>A Task representing the asynchronous operation</returns>
       /// <exception cref="ArgumentNullException"></exception>
 
@@ -195,7 +176,7 @@ namespace Autodesk.AutoCAD.ApplicationServices.LayoutUtils
       /// The predicate is evaluated before entering the 
       /// asynchrnous wait state and in that case, if it 
       /// returns true, this method returns immediately
-      /// without waiting for an Idle event to be raised. 
+      /// without waiting entering an asynchronous wait. 
       /// 
       /// Usage:
       /// <code>
@@ -210,8 +191,8 @@ namespace Autodesk.AutoCAD.ApplicationServices.LayoutUtils
       ///       await DocMgr.WaitUntil(doc => doc.Editor.IsQuiescent);
       ///       
       ///       // Code appearing here will not run until 
-      ///       // the next Idle event is raised, there is
-      ///       // an active document, and that document
+      ///       // the next Idle event is raised; there is
+      ///       // an active document; and that document
       ///       // is in a quiescent state.
       ///       
       ///       var doc = DocMgr.MdiActiveDocument;       
@@ -223,8 +204,8 @@ namespace Autodesk.AutoCAD.ApplicationServices.LayoutUtils
       /// If this method is called at startup (such as from an
       /// IExtensionApplication.Initialize) method, it can use
       /// the default value of documentRequired (true), to tell
-      /// this method to wait for an active document before
-      /// evaluating the predicate.
+      /// this method to wait for an active document before it
+      /// evaluates the predicate.
       /// </remarks>
       /// </summary>
       /// <param name="docs">The Document that is active at
@@ -244,7 +225,7 @@ namespace Autodesk.AutoCAD.ApplicationServices.LayoutUtils
       /// document, the predicate will be passed null, and should
       /// check its argument before attempting to use it. If this
       /// value is true, the predicate is not called if there is
-      /// no active document, and the method will continue to wait.</param>
+      /// no active document and this method will continue to wait.</param>
       /// <returns>A Task representing the asynchronous operation</returns>
       /// <exception cref="ArgumentNullException"></exception>
 
