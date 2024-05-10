@@ -308,11 +308,14 @@ namespace Autodesk.AutoCAD.ApplicationServices.AsyncHelpers
          {
             action();
          }
-         await docs.ExecuteInCommandContextAsync((o) =>
+         else
          {
-            action();
-            return Task.CompletedTask;
-         }, null);
+            await docs.ExecuteInCommandContextAsync((o) =>
+            {
+               action();
+               return Task.CompletedTask;
+            }, null);
+         }
       }
 
    }
