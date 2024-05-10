@@ -64,7 +64,7 @@ namespace Autodesk.AutoCAD.ApplicationServices.AsyncHelpers
 
       /// <summary>
       /// Wraps a handler for the Application.Idle event and
-      /// exposes it as an asynchronous, await-able method:
+      /// exposes it as an asynchronous, awaitable method:
       /// 
       /// An awaited call to this method will not return 
       /// until the next Idle event is raised, and there 
@@ -76,7 +76,7 @@ namespace Autodesk.AutoCAD.ApplicationServices.AsyncHelpers
       ///    {
       ///       var DocMgr = Application.DocumentManager;
       ///       
-      ///       // wait for an Idle event to be raised:
+      ///       // wait for the next Idle event to be raised:
       ///       
       ///       await DocMgr.WaitForIdle();
       ///       
@@ -125,30 +125,48 @@ namespace Autodesk.AutoCAD.ApplicationServices.AsyncHelpers
 
       /// <summary>
       /// Takes a predicate and asynchronously waits until the
-      /// predicate returns true. The predicate is evaluated
+      /// predicate returns true. If the waitForIdle argument
+      /// is provided and is true, the predicate is evaluated
       /// immediately upon calling this method. If it returns
       /// true, the method returns immediately without entering
-      /// an asynchrnous wait state.
+      /// an asynchronous wait state.
       /// 
-      /// If the initial call to the predicate returns false,
-      /// the predicate is evaluated every time the Idle event
-      /// is raised, and this method returns when the predicate
-      /// returns true.
+      /// If waitForIdle is false, the predicate is not evaluated
+      /// until the first Idle event is raised, and is evaluated 
+      /// every time the Idle event is subsequently raised. This
+      /// method will not return until the predicate returns true. 
+      /// 
+      /// <remarks>
+      /// The behavior of this API when called from the document
+      /// execution context is undefined.
+      /// </remarks>
       /// </summary>
       /// <param name="docs">The DocumentCollection</param>
-      /// <param name="predicate">A delegate that returns a value
+      /// <param name="waitForIdle">A value indicating if the given
+      /// predicate should be evaluated immediately when this method
+      /// is called. If this value is true, the predicate will be
+      /// evaluated when this method is called, before entering into
+      /// an asynchronous wait state. If the predicate evaluates to 
+      /// true, the method returns immediately without entering into
+      /// the asynchronous wait state. If this value is false, the
+      /// predicate is not evaluated until the first Idle event has
+      /// been raised. The default value is false</param>
+      /// <param name="predicate">A predicate that returns a value
       /// indicating if this method should return, or continue to
-      /// handle Idle events.</param>
+      /// handle Idle events. This predicate is evaluated on each 
+      /// Idle event until it returns true, at which point this 
+      /// method returns.</param>
       /// <returns>A Task representing the asynchronous operation</returns>
       /// <exception cref="ArgumentNullException"></exception>
 
-      public static Task WaitUntil(this DocumentCollection docs, Func<bool> predicate)
+      public static Task WaitUntil(this DocumentCollection docs, 
+         bool waitForIdle, Func<bool> predicate)
       {
          if(docs == null)
             throw new ArgumentNullException(nameof(docs));
          if(predicate == null)
             throw new ArgumentNullException(nameof(predicate));
-         if(predicate())
+         if(!waitForIdle && predicate())
             return Task.CompletedTask;
          var source = new TaskCompletionSource<object>();
          Application.Idle += idle;
@@ -162,6 +180,16 @@ namespace Autodesk.AutoCAD.ApplicationServices.AsyncHelpers
                source.TrySetResult(null);
             }
          }
+      }
+
+      /// <summary>
+      /// Overload of the above that passes a default
+      /// value of false for the waitForIdle argument.
+      /// </summary>
+
+      public static Task WaitUntil(this DocumentCollection docs, Func<bool> predicate)
+      {
+         return WaitUntil(docs, false, predicate);
       }
 
       /// <summary>
@@ -236,28 +264,45 @@ namespace Autodesk.AutoCAD.ApplicationServices.AsyncHelpers
       /// document, the predicate will be passed null, and should
       /// check its argument before attempting to use it. If this
       /// value is true, the predicate is not called if there is
-      /// no active document and this method will continue to wait.</param>
+      /// no active document and this method will continue to wait.
+      /// The default value is true</param>
+      /// <param name="waitForIdle">A value indicating if the given
+      /// predicate should be evaluated immediately when this method
+      /// is called. If this value is true, the predicate will be
+      /// evaluated when this method is called, before entering into
+      /// an asynchronous wait state. If the predicate evaluates to 
+      /// true, the method returns immediately without entering into
+      /// the asynchronous wait state. If this value is false, the
+      /// predicate is not evaluated until the first Idle event has
+      /// been raised. The default value is true.</param>
       /// <returns>A Task representing the asynchronous operation</returns>
       /// <exception cref="ArgumentNullException"></exception>
 
       public static Task WaitUntil(this DocumentCollection docs, 
          Func<Document, bool> predicate,
-         bool documentRequired = true)
+         bool documentRequired = true,
+         bool waitForIdle = true)
       {
          if(docs == null)
             throw new ArgumentNullException(nameof(docs));
          if(predicate == null)
             throw new ArgumentNullException(nameof(predicate));
-         if((!documentRequired || docs.MdiActiveDocument != null) && predicate(docs.MdiActiveDocument))
+         if(!waitForIdle && Evaluate())
             return Task.CompletedTask;
          var source = new TaskCompletionSource<object>();
          Application.Idle += idle;
          return source.Task;
 
+         bool Evaluate()
+         {
+            Document doc = docs.MdiActiveDocument;
+            return (!documentRequired || doc != null) && predicate(doc);
+         }
+
          void idle(object sender, EventArgs e)
          {
             Document doc = docs.MdiActiveDocument;
-            if((!documentRequired || doc != null) && predicate(doc))
+            if(Evaluate())
             {
                Application.Idle -= idle;
                source.TrySetResult(null);
