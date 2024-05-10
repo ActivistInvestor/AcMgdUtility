@@ -220,8 +220,7 @@ namespace Autodesk.AutoCAD.ApplicationServices.AsyncHelpers
       /// 
       /// </remarks>
       /// </summary>
-      /// <param name="docs">The Document that is active at
-      /// the point when the given predicate is called.</param>
+      /// <param name="docs">The DocumentsCollection</param>
       /// <param name="predicate">A method taking a Document 
       /// as its argument, that returns a value indicating if
       /// this method should return, or continue to wait.
