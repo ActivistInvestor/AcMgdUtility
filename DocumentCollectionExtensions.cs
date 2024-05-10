@@ -164,19 +164,20 @@ namespace Autodesk.AutoCAD.ApplicationServices.AsyncHelpers
       }
 
       /// <summary>
-      /// An overloaded version of the above that requires
+      /// An overloaded version of WaitUntil() that requires
       /// a predicate that takes a Document as an argument.
       ///
       /// Waits until the supplied predicate returns true 
-      /// and there is an active document. The predicate
-      /// takes a Document as its argument, and is passed
-      /// the Document that is active at the point when the
-      /// predicate is invoked. 
+      /// and there is an active document. The predicate is
+      /// passed the Document that is active at the point 
+      /// when the predicate is invoked. That may not be the
+      /// same document that was active when this method was
+      /// called.
       /// 
       /// The predicate is evaluated before entering the 
       /// asynchrnous wait state and in that case, if it 
       /// returns true, this method returns immediately
-      /// without waiting entering an asynchronous wait. 
+      /// without waiting. 
       /// 
       /// Usage:
       /// <code>
@@ -196,7 +197,7 @@ namespace Autodesk.AutoCAD.ApplicationServices.AsyncHelpers
       ///       // is in a quiescent state.
       ///       
       ///       var doc = DocMgr.MdiActiveDocument;       
-      ///       doc.Editor.WriteMessage("The Drawing Editor is Quiescent");
+      ///       doc.Editor.WriteMessage("The Drawing Editor is quiescent");
       ///    }
       ///    
       /// </code>
