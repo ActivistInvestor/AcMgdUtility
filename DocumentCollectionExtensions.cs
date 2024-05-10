@@ -108,10 +108,8 @@ namespace Autodesk.AutoCAD.ApplicationServices.AsyncHelpers
       {
          if(docs == null)
             throw new ArgumentNullException(nameof(docs));
-         Document active = docs.MdiActiveDocument;
          var source = new TaskCompletionSource<object>();
          Application.Idle += idle;
-         source.Task.Wait();
          return source.Task;
 
          void idle(object sender, EventArgs e)
@@ -154,7 +152,6 @@ namespace Autodesk.AutoCAD.ApplicationServices.AsyncHelpers
             return Task.CompletedTask;
          var source = new TaskCompletionSource<object>();
          Application.Idle += idle;
-         source.Task.Wait();
          return source.Task;
 
          void idle(object sender, EventArgs e)
@@ -246,7 +243,6 @@ namespace Autodesk.AutoCAD.ApplicationServices.AsyncHelpers
             return Task.CompletedTask;
          var source = new TaskCompletionSource<object>();
          Application.Idle += idle;
-         source.Task.Wait();
          return source.Task;
 
          void idle(object sender, EventArgs e)
