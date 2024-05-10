@@ -175,10 +175,14 @@ namespace Autodesk.AutoCAD.ApplicationServices.AsyncHelpers
       /// same document that was active when this method was
       /// called.
       /// 
-      /// The predicate is evaluated before entering the 
-      /// asynchrnous wait state and in that case, if it 
-      /// returns true, this method returns immediately
-      /// without waiting. 
+      /// Notes: 
+      /// 
+      /// If there is an active document when this method 
+      /// is called, the method will evaluate the predicate 
+      /// before entering an asynchronous wait state, and if 
+      /// the predicate returns true, this method returns 
+      /// immediately, without entering an asynchronous wait 
+      /// state.
       /// 
       /// Usage:
       /// <code>
@@ -205,9 +209,15 @@ namespace Autodesk.AutoCAD.ApplicationServices.AsyncHelpers
       /// <remarks>
       /// If this method is called at startup (such as from an
       /// IExtensionApplication.Initialize) method, it can use
-      /// the default value of documentRequired (true), to tell
-      /// this method to wait for an active document before it
-      /// evaluates the predicate.
+      /// the default value of documentRequired (true), to wait 
+      /// for an active document before evaluating the predicate.
+      /// 
+      /// Caveats:
+      /// 
+      /// If this method is called from the document execution
+      /// context (which is not recommended), code that follows 
+      /// the awaited call executes in the application context.
+      /// 
       /// </remarks>
       /// </summary>
       /// <param name="docs">The Document that is active at
