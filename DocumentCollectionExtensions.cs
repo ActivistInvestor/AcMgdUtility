@@ -187,8 +187,8 @@ namespace Autodesk.AutoCAD.ApplicationServices.AsyncHelpers
       ///    {
       ///       var DocMgr = Application.DocumentManager;
       ///       
-      ///       // Waits until the Editor is in a
-      ///       // a quiescent state:
+      ///       // Waits until there is an active document
+      ///       // that is in a quiescent state:
       ///       
       ///       await DocMgr.WaitUntil(doc => doc.Editor.IsQuiescent);
       ///       
