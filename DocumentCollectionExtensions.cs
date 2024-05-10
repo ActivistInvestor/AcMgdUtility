@@ -13,6 +13,10 @@ namespace Autodesk.AutoCAD.ApplicationServices.AsyncHelpers
    /// Exposes helper APIs as extension methods that
    /// target the DocumentCollection class. 
    /// 
+   /// Updated 5/10/24: Removed code that was added
+   /// to WaitXxxx() methods for testing purposes, and 
+   /// was inadvertently not removed. 
+   /// 
    /// Additional extension methods will be added to 
    /// this class once they have been documented.
    /// 
