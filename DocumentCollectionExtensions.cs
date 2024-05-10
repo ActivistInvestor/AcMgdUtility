@@ -125,16 +125,7 @@ namespace Autodesk.AutoCAD.ApplicationServices.AsyncHelpers
 
       /// <summary>
       /// Takes a predicate and asynchronously waits until the
-      /// predicate returns true. If the waitForIdle argument
-      /// is provided and is true, the predicate is evaluated
-      /// immediately upon calling this method. If it returns
-      /// true, the method returns immediately without entering
-      /// an asynchronous wait state.
-      /// 
-      /// If waitForIdle is false, the predicate is not evaluated
-      /// until the first Idle event is raised, and is evaluated 
-      /// every time the Idle event is subsequently raised. This
-      /// method will not return until the predicate returns true. 
+      /// predicate returns true. 
       /// 
       /// <remarks>
       /// The behavior of this API when called from the document
