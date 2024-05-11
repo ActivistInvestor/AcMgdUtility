@@ -59,17 +59,34 @@ namespace Autodesk.AutoCAD.ApplicationServices.AsyncHelpers
          document |= quiescent;
          Document doc = docs.MdiActiveDocument;
          return doc == null ? !document
-            : !quiescent || docs.MdiActiveDocument.Editor.IsQuiescent;
+            : !quiescent || doc.Editor.IsQuiescent;
       }
 
       /// <summary>
       /// Wraps a handler for the Application.Idle event and
-      /// exposes it as an asynchronous, awaitable method:
+      /// allows the body of the event handler to be expressed 
+      /// as code that follows an awaited call to this method.
       /// 
-      /// An awaited call to this method will not return 
-      /// until the next Idle event is raised, and there 
-      /// is an active document.
-      ///
+      /// The code that follows an awaited call to this method
+      /// is functionally-equivalent to code within the body of
+      /// a handler of the Application.Idle event. This method
+      /// automates the task of adding and removing the handler 
+      /// for the Idle event and from that handler, signaling 
+      /// that the event has been raised, allowing the code that
+      /// follows the awaited call to this method to execute in 
+      /// the context of a handler of the event.
+      /// 
+      /// Hence, awaited calls to this method will not return 
+      /// until the next Idle event is raised and optionally,
+      /// there is an active document that optionally, is in
+      /// a quiescent state. 
+      /// 
+      /// The default values for the optional arguments require 
+      /// an active document that does not need to be quiescent.
+      /// Callers can pass false to indicate this method should 
+      /// return on the first Idle event, regardless of whether
+      /// there is an active document or not.
+      /// 
       /// Usage:
       /// 
       ///    public static async void MyMethod()
@@ -81,8 +98,10 @@ namespace Autodesk.AutoCAD.ApplicationServices.AsyncHelpers
       ///       await DocMgr.WaitForIdle();
       ///       
       ///       // Code appearing here will not run until 
-      ///       // the next Idle event is raised and there
-      ///       // is an active document.
+      ///       // the next Idle event is raised, and there
+      ///       // is an active document. The following code
+      ///       // can assume that MdiActiveDocument is not 
+      ///       // null.
       ///       
       ///       var doc = DocMgr.MdiActiveDocument;       
       ///       doc.Editor.WriteMessage("An Idle event was raised.");
@@ -125,10 +144,10 @@ namespace Autodesk.AutoCAD.ApplicationServices.AsyncHelpers
 
       /// <summary>
       /// Takes a predicate and asynchronously waits until the
-      /// predicate returns true. The predicate is evaluated
-      /// each time the Idle event is raised and optionally,
-      /// when this method is called. This method will return
-      /// when a call to the predicate returns true.
+      /// predicate evaluates to true. The predicate is evaluated
+      /// each time the Idle event is raised and optionally, when 
+      /// this method is called. This method returns when a call 
+      /// to the predicate returns true.
       /// 
       /// <remarks>
       /// The behavior of this API when called from the document
@@ -146,9 +165,9 @@ namespace Autodesk.AutoCAD.ApplicationServices.AsyncHelpers
       /// default value is false</param>
       /// <param name="predicate">A predicate that returns a value
       /// indicating if this method should return, or continue to
-      /// handle Idle events. This predicate is evaluated on each 
-      /// Idle event until it returns true, at which point this 
-      /// method returns.</param>
+      /// handle Idle events. This predicate is evaluated each time
+      /// the Idle event is raised until it returns true, at which 
+      /// point this method returns.</param>
       /// <returns>A Task representing the asynchronous operation</returns>
       /// <exception cref="ArgumentNullException"></exception>
 
@@ -338,7 +357,7 @@ namespace Autodesk.AutoCAD.ApplicationServices.AsyncHelpers
       }
 
       /// <summary>
-      /// An await-able version of InvokeAsCommand() that 
+      /// The asynchronous version of InvokeAsCommand() that 
       /// can be awaited by the caller.
       /// </summary>
       /// <param name="docs">The DocumentCollection</param>
