@@ -1,6 +1,18 @@
 ﻿using System;
 using System.Threading.Tasks;
 
+/// Idle.cs  ActivistInvestor / Tony Tanzillo
+/// 
+/// Distributed under the terms of the MIT license
+/// 
+/// Utilities that aid in the use of AutoCAD's
+/// Application.Idle event in various ways.
+/// 
+/// Original source location:
+/// 
+///    https://github.com/ActivistInvestor/AcMgdUtility/blob/main/Idle.cs
+///
+
 namespace Autodesk.AutoCAD.ApplicationServices.AsyncHelpers
 {
    public static class Idle
@@ -64,20 +76,16 @@ namespace Autodesk.AutoCAD.ApplicationServices.AsyncHelpers
       /// <returns>A Task representing the asynchronous operation</returns>
       /// <exception cref="ArgumentNullException"></exception>
 
-      public static Task WaitForIdle(this DocumentCollection docs,
-         bool quiescentRequired = false,
+      public static Task WaitForIdle(bool quiescentRequired = false,
          bool documentRequired = true)
       {
-         if(docs == null)
-            throw new ArgumentNullException(nameof(docs));
          var source = new TaskCompletionSource<object>();
          Application.Idle += idle;
          return source.Task;
 
          void idle(object sender, EventArgs e)
          {
-            Document doc = docs.MdiActiveDocument;
-            if(CanInvoke(docs, quiescentRequired, documentRequired))
+            if(CanInvoke(quiescentRequired, documentRequired))
             {
                Application.Idle -= idle;
                source.TrySetResult(null);
@@ -114,11 +122,8 @@ namespace Autodesk.AutoCAD.ApplicationServices.AsyncHelpers
       /// <returns>A Task representing the asynchronous operation</returns>
       /// <exception cref="ArgumentNullException"></exception>
 
-      public static Task WaitUntil(this DocumentCollection docs,
-         bool waitForIdle, Func<bool> predicate)
+      public static Task WaitUntil(bool waitForIdle, Func<bool> predicate)
       {
-         if(docs == null)
-            throw new ArgumentNullException(nameof(docs));
          if(predicate == null)
             throw new ArgumentNullException(nameof(predicate));
          if(!waitForIdle && predicate())
@@ -142,9 +147,9 @@ namespace Autodesk.AutoCAD.ApplicationServices.AsyncHelpers
       /// value of false for the waitForIdle argument.
       /// </summary>
 
-      public static Task WaitUntil(this DocumentCollection docs, Func<bool> predicate)
+      public static Task WaitUntil(Func<bool> predicate)
       {
-         return WaitUntil(docs, false, predicate);
+         return WaitUntil(false, predicate);
       }
 
       /// <summary>
@@ -233,13 +238,10 @@ namespace Autodesk.AutoCAD.ApplicationServices.AsyncHelpers
       /// <returns>A Task representing the asynchronous operation</returns>
       /// <exception cref="ArgumentNullException"></exception>
 
-      public static Task WaitUntil(this DocumentCollection docs,
-         Func<Document, bool> predicate,
+      public static Task WaitUntil(Func<Document, bool> predicate,
          bool documentRequired = true,
          bool waitForIdle = true)
       {
-         if(docs == null)
-            throw new ArgumentNullException(nameof(docs));
          if(predicate == null)
             throw new ArgumentNullException(nameof(predicate));
          if(!waitForIdle && Evaluate())
@@ -250,13 +252,12 @@ namespace Autodesk.AutoCAD.ApplicationServices.AsyncHelpers
 
          bool Evaluate()
          {
-            Document doc = docs.MdiActiveDocument;
+            Document doc = Application.DocumentManager.MdiActiveDocument;
             return (!documentRequired || doc != null) && predicate(doc);
          }
 
          void idle(object sender, EventArgs e)
          {
-            Document doc = docs.MdiActiveDocument;
             if(Evaluate())
             {
                Application.Idle -= idle;
@@ -264,6 +265,32 @@ namespace Autodesk.AutoCAD.ApplicationServices.AsyncHelpers
             }
          }
       }
+
+      /// <summary>
+      /// Indicates if an operation can execute based on
+      /// specified conditions.
+      /// <param name="document">A value indicating if an 
+      /// active document is required to execute the operation</param>
+      /// <param name="quiescent">A value indicating if a
+      /// quiescent active document is required to execute
+      /// the operation</param>
+      /// <remarks>
+      /// if quiescent is true, document is not evaluated
+      /// and is implicitly true.
+      /// If there is no active document, quiescent is not 
+      /// evaluated and is implicitly false.
+      /// </remarks>
+      /// </summary>
+
+      public static bool CanInvoke(bool quiescent = false, bool document = true)
+      {
+         document |= quiescent;
+         Document doc = Application.DocumentManager.MdiActiveDocument;
+         return doc == null ? !document
+            : !quiescent || doc.Editor.IsQuiescent;
+      }
+
+      static Document ActiveDocument => Application.DocumentManager.MdiActiveDocument;
 
    }
 }

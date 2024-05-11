@@ -1,7 +1,8 @@
-﻿using System;
+﻿using Autodesk.AutoCAD.ApplicationServices.AsyncHelpers;
+using System;
 using System.Threading.Tasks;
 
-namespace Autodesk.AutoCAD.ApplicationServices.AsyncHelpers
+namespace Autodesk.AutoCAD.ApplicationServices.DocumentExtensions
 {
    /// <summary>
    /// DocumentCollectionExtensions.cs:
@@ -205,11 +206,8 @@ namespace Autodesk.AutoCAD.ApplicationServices.AsyncHelpers
       /// the default value of documentRequired (true), to wait 
       /// for an active document before evaluating the predicate.
       /// 
-      /// Caveats:
-      /// 
-      /// If this method is called from the document execution
-      /// context (which is not recommended), code that follows 
-      /// the awaited call executes in the application context.
+      /// The behavior of this API when called from the document
+      /// execution context is undefined.
       /// 
       /// </remarks>
       /// </summary>
@@ -285,8 +283,8 @@ namespace Autodesk.AutoCAD.ApplicationServices.AsyncHelpers
       }
 
       /// <summary>
-      /// The asynchronous version of InvokeAsCommand() that 
-      /// can be awaited by the caller.
+      /// The asynchronous version of InvokeAsCommand() 
+      /// that can be awaited.
       /// </summary>
       /// <param name="docs">The DocumentCollection</param>
       /// <param name="action">The Action to execute</param>
