@@ -3,46 +3,7 @@ using System.Threading.Tasks;
 
 namespace Autodesk.AutoCAD.ApplicationServices.AsyncHelpers
 {
-   /// <summary>
-   /// DocumentCollectionExtensions.cs:
-   /// 
-   /// Source location:
-   /// 
-   ///   https://github.com/ActivistInvestor/AcMgdUtility/blob/main/DocumentCollectionExtensions.cs
-   ///   
-   /// Prerequisites:
-   /// 
-   ///   https://github.com/ActivistInvestor/AcMgdUtility/blob/main/Idle.cs
-   ///   
-   /// Exposes helper APIs as extension methods that
-   /// target the DocumentCollection class. 
-   /// 
-   /// Updated 5/10/24: 
-   /// 
-   /// Removed code that was added to WaitXxxx() methods 
-   /// that used for testing purposes, and inadvertently 
-   /// left in the initial distribution.
-   /// 
-   /// Idle event-related APIs have been refactored out
-   /// to a seperate code file (Idle.cs), which this file
-   /// is dependent on. The implementation of WaitForIdle()
-   /// and WaitUntil() are now members of the Idle class.
-   /// 
-   /// Additional extension methods will be added to 
-   /// this class once they have been documented.
-   /// 
-   /// Notes: 
-   /// 
-   /// Some of the methods of this class depart from 
-   /// the standard practice of naming asynchronous,
-   /// awaitable methods with the suffix "Async". 
-   /// 
-   /// The reason is mainly due to the fact that the 
-   /// asynchronous nature of these methods is implied 
-   /// by the fact that their names start with "Wait".
-   /// </summary>
-
-   public static partial class DocumentCollectionExtensions
+   public static class Idle
    {
       /// <summary>
       /// Wraps a handler for the Application.Idle event and
@@ -53,10 +14,10 @@ namespace Autodesk.AutoCAD.ApplicationServices.AsyncHelpers
       /// is functionally-equivalent to code within the body of
       /// a handler of the Application.Idle event. This method
       /// automates the task of adding and removing the handler 
-      /// for the Idle event, and from that handler, signaling 
-      /// that the event was raised, which trigger execution of
-      /// the code that follows the awaited call to this method,
-      /// in the context of a handler of the event.
+      /// for the Idle event and from that handler, signaling 
+      /// that the event has been raised, allowing the code that
+      /// follows the awaited call to this method to execute in 
+      /// the context of a handler of the event.
       /// 
       /// Hence, awaited calls to this method will not return 
       /// until the next Idle event is raised and optionally,
@@ -103,13 +64,25 @@ namespace Autodesk.AutoCAD.ApplicationServices.AsyncHelpers
       /// <returns>A Task representing the asynchronous operation</returns>
       /// <exception cref="ArgumentNullException"></exception>
 
-      public static Task WaitForIdle(this DocumentCollection docs, 
+      public static Task WaitForIdle(this DocumentCollection docs,
          bool quiescentRequired = false,
          bool documentRequired = true)
       {
          if(docs == null)
             throw new ArgumentNullException(nameof(docs));
-         return Idle.WaitForIdle(quiescentRequired, documentRequired);
+         var source = new TaskCompletionSource<object>();
+         Application.Idle += idle;
+         return source.Task;
+
+         void idle(object sender, EventArgs e)
+         {
+            Document doc = docs.MdiActiveDocument;
+            if(CanInvoke(docs, quiescentRequired, documentRequired))
+            {
+               Application.Idle -= idle;
+               source.TrySetResult(null);
+            }
+         }
       }
 
       /// <summary>
@@ -141,10 +114,27 @@ namespace Autodesk.AutoCAD.ApplicationServices.AsyncHelpers
       /// <returns>A Task representing the asynchronous operation</returns>
       /// <exception cref="ArgumentNullException"></exception>
 
-      public static Task WaitUntil(this DocumentCollection docs, 
+      public static Task WaitUntil(this DocumentCollection docs,
          bool waitForIdle, Func<bool> predicate)
       {
-         return Idle.WaitUntil(waitForIdle, predicate);
+         if(docs == null)
+            throw new ArgumentNullException(nameof(docs));
+         if(predicate == null)
+            throw new ArgumentNullException(nameof(predicate));
+         if(!waitForIdle && predicate())
+            return Task.CompletedTask;
+         var source = new TaskCompletionSource<object>();
+         Application.Idle += idle;
+         return source.Task;
+
+         void idle(object sender, EventArgs e)
+         {
+            if(predicate())
+            {
+               Application.Idle -= idle;
+               source.TrySetResult(null);
+            }
+         }
       }
 
       /// <summary>
@@ -154,7 +144,7 @@ namespace Autodesk.AutoCAD.ApplicationServices.AsyncHelpers
 
       public static Task WaitUntil(this DocumentCollection docs, Func<bool> predicate)
       {
-         return Idle.WaitUntil(false, predicate);
+         return WaitUntil(docs, false, predicate);
       }
 
       /// <summary>
@@ -243,104 +233,37 @@ namespace Autodesk.AutoCAD.ApplicationServices.AsyncHelpers
       /// <returns>A Task representing the asynchronous operation</returns>
       /// <exception cref="ArgumentNullException"></exception>
 
-      public static Task WaitUntil(this DocumentCollection docs, 
+      public static Task WaitUntil(this DocumentCollection docs,
          Func<Document, bool> predicate,
          bool documentRequired = true,
          bool waitForIdle = true)
       {
-         return Idle.WaitUntil(predicate, documentRequired, waitForIdle);
-      }
-
-      /// <summary>
-      /// Wrapper for ExecuteInCommandContextAsync().
-      /// 
-      /// Executes the given action in the document/command 
-      /// context. If called from the application context, the
-      /// command executes asynchronously and callers should
-      /// not rely on side effects of the action which may not
-      /// execute until after the calling code returns.
-      /// </summary>
-      /// <param name="docs">The DocumentCollection</param>
-      /// <param name="action">The Action to execute</param>
-      /// <exception cref="ArgumentNullException"></exception>
-
-      public static void InvokeAsCommand(this DocumentCollection docs, Action action)
-      {
          if(docs == null)
             throw new ArgumentNullException(nameof(docs));
-         if(action == null)
-            throw new ArgumentNullException(nameof(action));
-         if(docs.IsApplicationContext)
+         if(predicate == null)
+            throw new ArgumentNullException(nameof(predicate));
+         if(!waitForIdle && Evaluate())
+            return Task.CompletedTask;
+         var source = new TaskCompletionSource<object>();
+         Application.Idle += idle;
+         return source.Task;
+
+         bool Evaluate()
          {
-            docs.ExecuteInCommandContextAsync((o) =>
+            Document doc = docs.MdiActiveDocument;
+            return (!documentRequired || doc != null) && predicate(doc);
+         }
+
+         void idle(object sender, EventArgs e)
+         {
+            Document doc = docs.MdiActiveDocument;
+            if(Evaluate())
             {
-               action();
-               return Task.CompletedTask;
-            }, null);
-         }
-         else
-         {
-            action();
+               Application.Idle -= idle;
+               source.TrySetResult(null);
+            }
          }
       }
-
-      /// <summary>
-      /// The asynchronous version of InvokeAsCommand() that 
-      /// can be awaited by the caller.
-      /// </summary>
-      /// <param name="docs">The DocumentCollection</param>
-      /// <param name="action">The Action to execute</param>
-      /// <exception cref="ArgumentNullException"></exception>
-
-      public static async void InvokeAsCommandAsync(this DocumentCollection docs, Action action)
-      {
-         if(docs == null)
-            throw new ArgumentNullException(nameof(docs));
-         if(action == null)
-            throw new ArgumentNullException(nameof(action));
-         if(!docs.IsApplicationContext)
-         {
-            action();
-         }
-         else
-         {
-            await docs.ExecuteInCommandContextAsync((o) =>
-            {
-               action();
-               return Task.CompletedTask;
-            }, null);
-         }
-      }
-
-      /// <summary>
-      /// Indicates if an operation can execute based on
-      /// specified conditions.
-      /// <param name="docs">The DocumentCollection</param>
-      /// <param name="document">A value indicating if an 
-      /// active document is required to execute the operation</param>
-      /// <param name="quiescent">A value indicating if a
-      /// quiescent active document is required to execute
-      /// the operation</param>
-      /// <remarks>
-      /// if quiescent is true, document is not evaluated
-      /// and is implicitly true.
-      /// If there is no active document, quiescent is not 
-      /// evaluated and is implicitly false.
-      /// </remarks>
-      /// </summary>
-
-      public static bool CanInvoke(this DocumentCollection docs,
-         bool quiescent = false, bool document = true)
-      {
-         if(docs == null)
-            throw new ArgumentNullException(nameof(docs));
-         document |= quiescent;
-         Document doc = docs.MdiActiveDocument;
-         return doc == null ? !document
-            : !quiescent || doc.Editor.IsQuiescent;
-      }
-
-
 
    }
 }
