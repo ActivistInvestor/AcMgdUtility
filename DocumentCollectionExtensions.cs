@@ -21,13 +21,15 @@ namespace Autodesk.AutoCAD.ApplicationServices.DocumentExtensions
    /// Updated 5/10/24: 
    /// 
    /// Removed code that was added to WaitXxxx() methods 
-   /// that used for testing purposes, and inadvertently 
+   /// that was for testing purposes, and inadvertently 
    /// left in the initial distribution.
    /// 
    /// Idle event-related APIs have been refactored out
    /// to a seperate code file (Idle.cs), which this file
    /// is dependent on. The implementation of WaitForIdle()
-   /// and WaitUntil() are now members of the Idle class.
+   /// and WaitUntil() are now members of the Idle class,
+   /// and the extension methods of the same name on this
+   /// class delegate to the former.
    /// 
    /// Additional extension methods will be added to 
    /// this class once they have been documented.
