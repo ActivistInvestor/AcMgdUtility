@@ -240,7 +240,7 @@ namespace Autodesk.AutoCAD.ApplicationServices.EditorExtensions
 
       public static Func<ObjectId, bool> GetPredicate<T>(
          bool exactMatch = false,
-         bool includingErased = true) where T: RXObject
+         bool includingErased = true) where T: DBObject
       {
          return GetPredicate(typeof(T), exactMatch, includingErased);
       }
