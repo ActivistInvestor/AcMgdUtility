@@ -6,6 +6,7 @@
 /// Source location:
 /// 
 ///     https://github.com/ActivistInvestor/AcMgdUtility/blob/main/CommandExtensions.cs
+///     
 using System;
 using System.Collections.Generic;
 using Autodesk.AutoCAD.DatabaseServices;
