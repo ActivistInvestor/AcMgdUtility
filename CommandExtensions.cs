@@ -82,7 +82,7 @@ namespace Autodesk.AutoCAD.ApplicationServices.EditorExtensions
             throw new ArgumentNullException(nameof(ids));
          Database db = editor.Document.Database;
          ObjectId ownerId = db.CurrentSpaceId;
-         Func<ObjectId, bool> predicate = GetPredicate(typeof(T), false, false);
+         Func<ObjectId, bool> predicate = GetObjectIdPredicate(typeof(T), false, false);
          db.ObjectAppended += appended;
          int start = ids.Count;
          try
@@ -138,7 +138,7 @@ namespace Autodesk.AutoCAD.ApplicationServices.EditorExtensions
             throw new ArgumentNullException(nameof(ids));
          if(ids.Count > 0)
          {
-            var predicate = GetPredicate(typeof(T), exactMatch, includingErased);
+            var predicate = GetObjectIdPredicate(typeof(T), exactMatch, includingErased);
             int len = ids.Count;
             for(int i = len - 1; i >= 0; i--)
             {
@@ -182,7 +182,7 @@ namespace Autodesk.AutoCAD.ApplicationServices.EditorExtensions
             throw new ArgumentNullException(nameof(ids));
          if(ids.Count > 0)
          {
-            var predicate = GetPredicate<T>(exactMatch, includingErased);
+            var predicate = GetObjectIdPredicate<T>(exactMatch, includingErased);
             for(int i = 0; i < ids.Count; i++)
             {
                if(predicate(ids[i]))
@@ -213,7 +213,7 @@ namespace Autodesk.AutoCAD.ApplicationServices.EditorExtensions
       /// <exception cref="ArgumentNullException"></exception>
       /// <exception cref="ArgumentException"></exception>
 
-      public static Func<ObjectId, bool> GetPredicate(Type type, 
+      public static Func<ObjectId, bool> GetObjectIdPredicate(Type type, 
          bool exactMatch = false, 
          bool includingErased = true)
       {
@@ -238,11 +238,11 @@ namespace Autodesk.AutoCAD.ApplicationServices.EditorExtensions
          }
       }
 
-      public static Func<ObjectId, bool> GetPredicate<T>(
+      public static Func<ObjectId, bool> GetObjectIdPredicate<T>(
          bool exactMatch = false,
          bool includingErased = true) where T: DBObject
       {
-         return GetPredicate(typeof(T), exactMatch, includingErased);
+         return GetObjectIdPredicate(typeof(T), exactMatch, includingErased);
       }
    }
 
