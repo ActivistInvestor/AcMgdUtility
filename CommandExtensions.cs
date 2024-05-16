@@ -132,7 +132,7 @@ namespace Autodesk.AutoCAD.ApplicationServices.EditorExtensions
             this ObjectIdCollection ids, 
             bool exactMatch = false, 
             bool includingErased = false)
-         where T:RXObject
+         where T: DBObject
       {
          if(ids == null)
             throw new ArgumentNullException(nameof(ids));
@@ -176,7 +176,7 @@ namespace Autodesk.AutoCAD.ApplicationServices.EditorExtensions
             this ObjectIdCollection ids, 
             bool exactMatch = false,
             bool includingErased = false)
-         where T: RXObject
+         where T: DBObject
       {
          if(ids == null)
             throw new ArgumentNullException(nameof(ids));
