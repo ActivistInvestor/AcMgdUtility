@@ -9,6 +9,8 @@
 ///     
 using System;
 using System.Collections.Generic;
+using System.Linq;
+using Autodesk.AutoCAD.ApplicationServices.DocumentExtensions;
 using Autodesk.AutoCAD.DatabaseServices;
 using Autodesk.AutoCAD.EditorInput;
 using Autodesk.AutoCAD.Runtime;
@@ -20,7 +22,7 @@ namespace Autodesk.AutoCAD.ApplicationServices.EditorExtensions
    /// a version of the Editor's Command() method, that can
    /// collect the ObjectIds of all objects created by the
    /// command sequence executed by the method. Most of the
-   /// code below exists and is included as-is, or has been
+   /// code below existed and is included as-is, or has been
    /// extracted/adapted from existing solutions that address 
    /// the same problem addressed by this code. All extension 
    /// methods have been rolled-up into a single static type.
@@ -33,45 +35,62 @@ namespace Autodesk.AutoCAD.ApplicationServices.EditorExtensions
    ///   ObjectIdExtensions.cs
    ///   ObjectIdCollectionExtensions.cs
    ///   
+   /// Disclaimer:
+   /// 
    /// The included code was intended to be used as-is, from a
    /// consuming application. The author cannot not provide any
-   /// support for modified or hacked versions of this source.
+   /// support for modified and/or hacked versions of this source.
+   /// 
+   /// For fun, I threw this problem at ChatGPT-4o, and it gave
+   /// me an 'almost-correct' example, but I had to correct it
+   /// on two major screw-ups:
+   /// 
+   ///   https://chat.openai.com/share/990a589f-b9a8-4db4-a95b-04ab44f33feb
+   /// 
+   /// Considering just how terse and deficient the AutoCAD Managed
+   /// API docs are, the old axiom "garbage in, garbage out" would 
+   /// seem to apply here, and explain ChatGPT's lack of expertise 
+   /// in this domain.
    /// </summary>
 
    public static class CommandExtensions
    {
-      
+
       /// <summary>
-      /// An overload of the Editor's Command() method that
-      /// accepts an ObjectIdCollection, to which it adds the
-      /// ObjectIds of all entities that were added to the
-      /// current space by the executed commands.
+      /// Adapted from an enhanced replacement for the Editor's 
+      /// Command() method. Most of the functionality from that 
+      /// method that isn't included in this vastly watered-down 
+      /// version, and focuses only on capturing new objects.
+      /// 
+      /// The Command<T>() Method:
+      /// 
+      /// A generic overload of the Editor's Command() method 
+      /// that accepts an ObjectIdCollection, to which it adds 
+      /// the ObjectIds of all entities that were added to the
+      /// current space by the executed command.
       /// 
       /// The same ObjectIdCollection can be passed into to 
-      /// multiple calls to this method if needed.
+      /// multiple calls to this method to collect the ids 
+      /// of new objects created by multiple commands.
       /// 
+      /// The generic argument specifies the type of entities
+      /// to collect. To collect all entities created by a
+      /// command, use 'Entity' as the generic argument type.
+      /// 
+      /// For example, to only collect the Ids of Polylines,
+      /// and ignore everything else:
+      /// 
+      ///   var polylineIds = new ObjectIdCollection();
+      ///   
+      ///   editor.Command<Polyline>(polylineIds, commandargs....)
+      ///    
       /// </summary>
+      /// <typeparam name="T">The type of entity to collect</typeparam>
       /// <param name="editor">The Editor of the active document</param>
       /// <param name="ids">The ObjectIdCollection to populate</param>
       /// <param name="args">The command arguments</param>
       /// <returns>The number of objects added to the collection</returns>
 
-      public static int Command(this Editor editor, ObjectIdCollection ids, params object[] args)
-      {
-         return Command<Entity>(editor, ids, args);
-      }
-
-      /// An generic version of the above that allows filtering 
-      /// by entity type. Only those types that are instances of
-      /// the generic argument type are collected.
-      /// 
-      /// For example, to only collect the Ids of Polylines:
-      /// 
-      ///   var polylineIds = new ObjectIdCollection();
-      ///   editor.Command<Polyline>(polylineIds, commandargs....)
-      ///    
-      /// <typeparam name="T">The type of entity to collect</typeparam>
-      
       public static int Command<T>(this Editor editor, 
             ObjectIdCollection ids, 
             params object[] args) where T: Entity
@@ -82,9 +101,9 @@ namespace Autodesk.AutoCAD.ApplicationServices.EditorExtensions
             throw new ArgumentNullException(nameof(ids));
          Database db = editor.Document.Database;
          ObjectId ownerId = db.CurrentSpaceId;
-         Func<ObjectId, bool> predicate = GetObjectIdPredicate(typeof(T), false, false);
-         db.ObjectAppended += appended;
+         var predicate = GetObjectIdPredicate(typeof(T), false, false);
          int start = ids.Count;
+         db.ObjectAppended += appended;
          try
          {
             editor.Command(args);
@@ -97,13 +116,46 @@ namespace Autodesk.AutoCAD.ApplicationServices.EditorExtensions
 
          void appended(object sender, ObjectEventArgs e)
          {
+            ObjectId id = e.DBObject.ObjectId;
             if(e.DBObject is T entity
                 && entity.BlockId == ownerId
-                && predicate(entity.ObjectId))
+                && predicate(id))
             {
-               ids.Add(entity.ObjectId);
+               ids.Add(id);
             }
          }
+      }
+
+      /// <summary>
+      /// Similar to Command<T>, except that it returns a new
+      /// ObjectIdCollection containing the Ids of the objects 
+      /// created by the command.
+      /// </summary>
+      /// <typeparam name="T">The type of entity to collect</typeparam>
+
+      public static ObjectIdCollection CommandWithResult<T>(this Editor ed, params object[] args)
+         where T : Entity
+      {
+         if(ed == null)
+            throw new ArgumentNullException(nameof(ed));
+         ObjectIdCollection ids = new ObjectIdCollection();
+         ed.Command<T>(ids, args);
+         return ids;
+      }
+
+      /// <summary>
+      /// Non-generic version of CommandWithResult() that uses 
+      /// Entity as the generic argument type, to collect all 
+      /// entities.
+      /// </summary>
+      
+      public static ObjectIdCollection CommandWithResult(this Editor ed, params object[] args)
+      {
+         if(ed == null)
+            throw new ArgumentNullException(nameof(ed));
+         ObjectIdCollection ids = new ObjectIdCollection();
+         ed.Command<Entity>(ids, args);
+         return ids;
       }
 
       /// <summary>
@@ -116,7 +168,7 @@ namespace Autodesk.AutoCAD.ApplicationServices.EditorExtensions
       /// E.g., get the ObjectId of the last non-erased PolyLine 
       /// in an ObjectIdCollection:
       /// 
-      ///    var lastPolyLineId = myIdCollection.Last<Polyline>();
+      ///    var lastPlineId = myIdCollection.Last<Polyline>();
       ///    
       /// </summary>
       /// <typeparam name="T">The type of object being requested</typeparam>
@@ -138,7 +190,7 @@ namespace Autodesk.AutoCAD.ApplicationServices.EditorExtensions
             throw new ArgumentNullException(nameof(ids));
          if(ids.Count > 0)
          {
-            var predicate = GetObjectIdPredicate(typeof(T), exactMatch, includingErased);
+            var predicate = GetObjectIdPredicate<T>(exactMatch, includingErased);
             int len = ids.Count;
             for(int i = len - 1; i >= 0; i--)
             {
@@ -244,8 +296,57 @@ namespace Autodesk.AutoCAD.ApplicationServices.EditorExtensions
       {
          return GetObjectIdPredicate(typeof(T), exactMatch, includingErased);
       }
+
+      /// <summary>
+      /// A ToArray() method for ObjectIdCollection 
+      /// (helps to de-clutter application code).
+      /// </summary>
+      /// <param name="ids">The ObjectIdCollection to convert to an array</param>
+      /// <returns>An array of ObjectId[] containing the elements 
+      /// of ObjectIdCollection</returns>
+      /// <exception cref="ArgumentNullException"></exception>
+      
+      public static ObjectId[] ToArray(this ObjectIdCollection ids)
+      {
+         if(ids == null) 
+            throw new ArgumentNullException(nameof(ids));
+         ObjectId[] array = new ObjectId[ids.Count];
+         ids.CopyTo(array, 0);
+         return array;
+      }
    }
 
+   public static class CommandWithResultExample
+   {
+      /// <summary>
+      /// Issues the HATCHGENERATEBOUNDARY command and collects
+      /// all of the objects created by same, and sets them to
+      /// the pickfirst selection set.
+      /// </summary>
+
+      [CommandMethod("SELECTHATCHBOUNDARY", CommandFlags.Redraw)]
+      public static void MyCommand()
+      {
+         Document doc = Application.DocumentManager.MdiActiveDocument;
+         Editor ed = doc.Editor;
+         PromptEntityOptions peo = new PromptEntityOptions("\nSelect hatch: ");
+         peo.AddAllowedClass(typeof(Hatch), true);
+         var per = ed.GetEntity(peo);
+         if(per.Status != PromptStatus.OK)
+            return;
+         ObjectId hatchId = per.ObjectId;
+         ObjectIdCollection newIds = new ObjectIdCollection();
+         ed.Command<Entity>(newIds, "HATCHGENERATEBOUNDARY", hatchId, "");
+         if(newIds.Count > 0)
+         {
+            ed.SetImpliedSelection(newIds.ToArray());
+         }
+         else
+         {
+            ed.WriteMessage("\nFailed to capture hatch boundary object(s).");
+         }
+      }
+   }
 
 
 
