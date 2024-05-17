@@ -2,7 +2,6 @@
 /// 
 /// Distributed under the terms of the MIT license.
 /// 
-///
 /// Source location:
 /// 
 ///     https://github.com/ActivistInvestor/AcMgdUtility/blob/main/CommandExtensions.cs
@@ -11,14 +10,18 @@
 /// 
 ///     https://github.com/ActivistInvestor/AcMgdUtility/blob/main/CommandExtensionExamples.cs
 ///     
+
 using System;
 using System.Collections;
 using System.Collections.Generic;
-using System.Linq;
-using Autodesk.AutoCAD.ApplicationServices.DocumentExtensions;
+using System.Threading.Tasks;
 using Autodesk.AutoCAD.DatabaseServices;
 using Autodesk.AutoCAD.EditorInput;
 using Autodesk.AutoCAD.Runtime;
+
+/// Revisions:
+/// 
+/// CommandWithResult() overloads are renamed to ResultFromCommand()
 
 namespace Autodesk.AutoCAD.ApplicationServices.EditorExtensions
 {
@@ -40,6 +43,22 @@ namespace Autodesk.AutoCAD.ApplicationServices.EditorExtensions
    ///   ObjectIdExtensions.cs
    ///   ObjectIdCollectionExtensions.cs
    ///   
+   /// This code addresses a fairly-common problem AutoCAD 
+   /// .NET deveopers are confronted by, which is how to get 
+   /// the objects added to the database by a command, or a 
+   /// sequence of several commands.
+   /// 
+   /// While the P/Invoke acdbEntLast() hack can be used to
+   /// get the last object added, it cannot get anything but
+   /// the last object. This solution was devised as a way to
+   /// get all objects created, rather than only the last one.
+   /// 
+   /// This solution is narrowly-focused on collecting entities 
+   /// added to the current space only, rather than any type
+   /// of DBObject added to any owner in the database. If that
+   /// is needed, you can adapt this solution to work for that
+   /// purpose.
+   /// 
    /// Disclaimer:
    /// 
    /// The included code was intended to be used as-is, from a
@@ -55,7 +74,7 @@ namespace Autodesk.AutoCAD.ApplicationServices.EditorExtensions
    /// Considering just how terse and deficient the AutoCAD Managed
    /// API docs are, the old axiom "garbage in, garbage out" would 
    /// seem to apply here, and explain ChatGPT's lack of expertise 
-   /// in this domain.
+   /// in this domain. 
    /// 
    /// See the accompanying file CommandExtensionExamples.cs for
    /// example code.
@@ -63,12 +82,16 @@ namespace Autodesk.AutoCAD.ApplicationServices.EditorExtensions
 
    public static class CommandExtensions
    {
+      static DocumentCollection docs = Application.DocumentManager;
 
       /// <summary>
       /// Adapted from an enhanced replacement for the Editor's 
       /// Command() method. Most of the functionality from that 
       /// method that isn't included in this vastly watered-down 
       /// version, and focuses only on capturing new objects.
+      /// 
+      /// In the near future that additional functionality will 
+      /// be added to this public-facing version, as time permits.
       /// 
       /// The Command<T>() Method:
       /// 
@@ -88,10 +111,20 @@ namespace Autodesk.AutoCAD.ApplicationServices.EditorExtensions
       /// For example, to only collect the Ids of Polylines,
       /// and ignore everything else:
       /// 
-      ///   var polylineIds = new ObjectIdCollection();
+      ///   var newPolylineIds = new ObjectIdCollection();
       ///   
-      ///   editor.Command<Polyline>(polylineIds, commandargs....)
-      ///    
+      ///   editor.Command<Polyline>(newPolylineIds, commandargs....)
+      ///   
+      /// To collect the ids of all entities, use:
+      /// 
+      ///   var newIds = new ObjectIdCollection();
+      ///   editor.Command<Entity>(newIds, "._BOUNDARY", etc...);
+      ///   
+      /// Or use the ResultFromCommand method to get the ids
+      /// executed by the command that is ussed:
+      /// 
+      ///   ObjectIdCollection ids = editor.ResultFromCommand(commandargs...);
+      ///   
       /// </summary>
       /// <typeparam name="T">The type of entity to collect</typeparam>
       /// <param name="editor">The Editor of the active document</param>
@@ -126,12 +159,28 @@ namespace Autodesk.AutoCAD.ApplicationServices.EditorExtensions
          {
             ObjectId id = e.DBObject.ObjectId;
             if(e.DBObject is T entity
-                && entity.BlockId == ownerId
+                && entity.BlockId == ownerId;
                 && predicate(id))
             {
                ids.Add(id);
             }
          }
+      }
+
+      /// <summary>
+      /// An asynchronous variant of Command<T>() that can be 
+      /// called from the Application context.
+      /// </summary>
+
+      public static async Task CommandAsync<T>(this Editor editor, 
+         ObjectIdCollection ids, 
+         params object[] args) where T: Entity
+      {
+         await docs.ExecuteInCommandContextAsync((unused) =>
+         {
+            Command<T>(editor, ids, args);
+            return Task.CompletedTask;
+         }, null);
       }
 
 
@@ -142,7 +191,7 @@ namespace Autodesk.AutoCAD.ApplicationServices.EditorExtensions
       /// </summary>
       /// <typeparam name="T">The type of entity to collect</typeparam>
 
-      public static ObjectIdCollection CommandWithResult<T>(this Editor ed, params object[] args)
+      public static ObjectIdCollection ResultFromCommand<T>(this Editor ed, params object[] args)
          where T : Entity
       {
          if(ed == null)
@@ -153,12 +202,12 @@ namespace Autodesk.AutoCAD.ApplicationServices.EditorExtensions
       }
 
       /// <summary>
-      /// Non-generic version of CommandWithResult() that uses 
+      /// Non-generic version of ResultFromCommand() that uses 
       /// Entity as the generic argument type, to collect all 
       /// entities.
       /// </summary>
 
-      public static ObjectIdCollection CommandWithResult(this Editor ed, params object[] args)
+      public static ObjectIdCollection ResultFromCommand(this Editor ed, params object[] args)
       {
          if(ed == null)
             throw new ArgumentNullException(nameof(ed));
