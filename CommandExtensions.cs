@@ -7,7 +7,12 @@
 /// 
 ///     https://github.com/ActivistInvestor/AcMgdUtility/blob/main/CommandExtensions.cs
 ///     
+/// Sample code location:
+/// 
+///     https://github.com/ActivistInvestor/AcMgdUtility/blob/main/CommandExtensionExamples.cs
+///     
 using System;
+using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
 using Autodesk.AutoCAD.ApplicationServices.DocumentExtensions;
@@ -38,12 +43,12 @@ namespace Autodesk.AutoCAD.ApplicationServices.EditorExtensions
    /// Disclaimer:
    /// 
    /// The included code was intended to be used as-is, from a
-   /// consuming application. The author cannot not provide any
-   /// support for modified and/or hacked versions of this source.
+   /// consuming application. The author provides no support for 
+   /// modified and/or hacked versions of this source.
    /// 
    /// For fun, I threw this problem at ChatGPT-4o, and it gave
-   /// me an 'almost-correct' example, but I had to correct it
-   /// on two major screw-ups:
+   /// me a less-than-correct result, which I had to correct it
+   /// on several screw-ups:
    /// 
    ///   https://chat.openai.com/share/990a589f-b9a8-4db4-a95b-04ab44f33feb
    /// 
@@ -51,6 +56,9 @@ namespace Autodesk.AutoCAD.ApplicationServices.EditorExtensions
    /// API docs are, the old axiom "garbage in, garbage out" would 
    /// seem to apply here, and explain ChatGPT's lack of expertise 
    /// in this domain.
+   /// 
+   /// See the accompanying file CommandExtensionExamples.cs for
+   /// example code.
    /// </summary>
 
    public static class CommandExtensions
@@ -91,9 +99,9 @@ namespace Autodesk.AutoCAD.ApplicationServices.EditorExtensions
       /// <param name="args">The command arguments</param>
       /// <returns>The number of objects added to the collection</returns>
 
-      public static int Command<T>(this Editor editor, 
-            ObjectIdCollection ids, 
-            params object[] args) where T: Entity
+      public static int Command<T>(this Editor editor,
+            ObjectIdCollection ids,
+            params object[] args) where T : Entity
       {
          if(editor == null)
             throw new ArgumentNullException(nameof(editor));
@@ -101,7 +109,7 @@ namespace Autodesk.AutoCAD.ApplicationServices.EditorExtensions
             throw new ArgumentNullException(nameof(ids));
          Database db = editor.Document.Database;
          ObjectId ownerId = db.CurrentSpaceId;
-         var predicate = GetObjectIdPredicate(typeof(T), false, false);
+         var predicate = GetObjectIdPredicate<T>(false, false);
          int start = ids.Count;
          db.ObjectAppended += appended;
          try
@@ -126,6 +134,7 @@ namespace Autodesk.AutoCAD.ApplicationServices.EditorExtensions
          }
       }
 
+
       /// <summary>
       /// Similar to Command<T>, except that it returns a new
       /// ObjectIdCollection containing the Ids of the objects 
@@ -148,7 +157,7 @@ namespace Autodesk.AutoCAD.ApplicationServices.EditorExtensions
       /// Entity as the generic argument type, to collect all 
       /// entities.
       /// </summary>
-      
+
       public static ObjectIdCollection CommandWithResult(this Editor ed, params object[] args)
       {
          if(ed == null)
@@ -181,10 +190,10 @@ namespace Autodesk.AutoCAD.ApplicationServices.EditorExtensions
       /// <exception cref="ArgumentNullException"></exception>
 
       public static ObjectId Last<T>(
-            this ObjectIdCollection ids, 
-            bool exactMatch = false, 
+            this ObjectIdCollection ids,
+            bool exactMatch = false,
             bool includingErased = false)
-         where T: DBObject
+         where T : DBObject
       {
          if(ids == null)
             throw new ArgumentNullException(nameof(ids));
@@ -203,9 +212,9 @@ namespace Autodesk.AutoCAD.ApplicationServices.EditorExtensions
       }
 
       /// <summary>
-      /// Returns a subset of the ObjectIdCollection whose
-      /// elements represent instances of the given generic 
-      /// argument type.
+      /// Returns a sequence that produces a subset of the 
+      /// ObjectIdCollection consisting of elements that
+      /// represent instances of the generic argument type.
       /// 
       /// If the exact argument is true and the given type
       /// is not abstract, types derived from the given type 
@@ -225,10 +234,10 @@ namespace Autodesk.AutoCAD.ApplicationServices.EditorExtensions
       /// <exception cref="ArgumentNullException"></exception>
 
       public static IEnumerable<ObjectId> OfType<T>(
-            this ObjectIdCollection ids, 
+            this ObjectIdCollection ids,
             bool exactMatch = false,
             bool includingErased = false)
-         where T: DBObject
+         where T : DBObject
       {
          if(ids == null)
             throw new ArgumentNullException(nameof(ids));
@@ -237,8 +246,9 @@ namespace Autodesk.AutoCAD.ApplicationServices.EditorExtensions
             var predicate = GetObjectIdPredicate<T>(exactMatch, includingErased);
             for(int i = 0; i < ids.Count; i++)
             {
-               if(predicate(ids[i]))
-                  yield return ids[i];
+               var id = ids[i];
+               if(predicate(id))
+                  yield return id;
             }
          }
       }
@@ -265,38 +275,31 @@ namespace Autodesk.AutoCAD.ApplicationServices.EditorExtensions
       /// <exception cref="ArgumentNullException"></exception>
       /// <exception cref="ArgumentException"></exception>
 
-      public static Func<ObjectId, bool> GetObjectIdPredicate(Type type, 
-         bool exactMatch = false, 
-         bool includingErased = true)
+      public static Func<ObjectId, bool> GetObjectIdPredicate<T>(
+         bool exactMatch = false,
+         bool includingErased = true) where T : DBObject
       {
-         if(type == null) 
-            throw new ArgumentNullException(nameof(type));
-         if(!typeof(RXObject).IsAssignableFrom(type))
-            throw new ArgumentException("invalid type");
-         RXClass rxclass = RXClass.GetClass(type);
+         exactMatch &= !typeof(T).IsAbstract;
          if(includingErased)
          {
-            if(exactMatch && !type.IsAbstract)
-               return id => id.ObjectClass == rxclass;
+            if(exactMatch)
+               return static id => id.ObjectClass == RXClass<T>.Value;
             else
-               return id => id.ObjectClass.IsDerivedFrom(rxclass);
+               return static id => id.ObjectClass.IsDerivedFrom(RXClass<T>.Value);
          }
          else
          {
-            if(exactMatch && !type.IsAbstract)
-               return id => id.ObjectClass == rxclass && !id.IsErased;
+            if(exactMatch)
+               return static id => id.ObjectClass == RXClass<T>.Value && !id.IsErased;
             else
-               return id => id.ObjectClass.IsDerivedFrom(rxclass) && !id.IsErased;
+               return static id => !id.IsErased 
+                  && id.ObjectClass.IsDerivedFrom(RXClass<T>.Value);
          }
       }
 
-      public static Func<ObjectId, bool> GetObjectIdPredicate<T>(
-         bool exactMatch = false,
-         bool includingErased = true) where T: DBObject
-      {
-         return GetObjectIdPredicate(typeof(T), exactMatch, includingErased);
-      }
-
+      /// Excerpted from CollectionExtentsions.cs
+      /// and ObjectIdCollectionExtensions.cs:
+      /// 
       /// <summary>
       /// A ToArray() method for ObjectIdCollection 
       /// (helps to de-clutter application code).
@@ -305,49 +308,41 @@ namespace Autodesk.AutoCAD.ApplicationServices.EditorExtensions
       /// <returns>An array of ObjectId[] containing the elements 
       /// of ObjectIdCollection</returns>
       /// <exception cref="ArgumentNullException"></exception>
-      
+
       public static ObjectId[] ToArray(this ObjectIdCollection ids)
       {
-         if(ids == null) 
-            throw new ArgumentNullException(nameof(ids));
-         ObjectId[] array = new ObjectId[ids.Count];
-         ids.CopyTo(array, 0);
+         return ToArray<ObjectId>(ids);
+      }
+
+      /// <summary>
+      /// ToArray() for non-generic ICollection types.
+      /// 
+      /// Requires the element type to be explicitly 
+      /// passed as the generic argument.
+      /// </summary>
+
+      public static T[] ToArray<T>(this ICollection collection)
+      {
+         if(collection == null)
+            throw new ArgumentNullException(nameof(collection));
+         T[] array = new T[collection.Count];
+         collection.CopyTo(array, 0);
          return array;
       }
    }
 
-   public static class CommandWithResultExample
+   /// <summary>
+   /// This allows us to avoid the capture of a 
+   /// local RXClass variable in lambda functions.
+   /// Referencing the Value field is faster than 
+   /// referencing the value stored in a captured 
+   /// local variable.
+   /// </summary>
+   /// <typeparam name="T"></typeparam>
+   
+   public static class RXClass<T> where T: RXObject
    {
-      /// <summary>
-      /// Issues the HATCHGENERATEBOUNDARY command and collects
-      /// all of the objects created by same, and sets them to
-      /// the pickfirst selection set.
-      /// </summary>
-
-      [CommandMethod("SELECTHATCHBOUNDARY", CommandFlags.Redraw)]
-      public static void MyCommand()
-      {
-         Document doc = Application.DocumentManager.MdiActiveDocument;
-         Editor ed = doc.Editor;
-         PromptEntityOptions peo = new PromptEntityOptions("\nSelect hatch: ");
-         peo.AddAllowedClass(typeof(Hatch), true);
-         var per = ed.GetEntity(peo);
-         if(per.Status != PromptStatus.OK)
-            return;
-         ObjectId hatchId = per.ObjectId;
-         ObjectIdCollection newIds = new ObjectIdCollection();
-         ed.Command<Entity>(newIds, "HATCHGENERATEBOUNDARY", hatchId, "");
-         if(newIds.Count > 0)
-         {
-            ed.SetImpliedSelection(newIds.ToArray());
-         }
-         else
-         {
-            ed.WriteMessage("\nFailed to capture hatch boundary object(s).");
-         }
-      }
+      public static readonly RXClass Value = RXClass.GetClass(typeof(T));
    }
-
-
-
 }
+
