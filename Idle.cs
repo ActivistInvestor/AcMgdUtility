@@ -12,24 +12,32 @@ using System.Threading.Tasks;
 /// 
 ///    https://github.com/ActivistInvestor/AcMgdUtility/blob/main/Idle.cs
 ///
+/// 05/12/24 Major refactoring:
+/// 
+/// This unit was refactored to address a shortcoming
+/// in the original design, which did not permit custom
+/// state to be associated with each handler to the Idle
+/// event. The refactored code uses a type derived from
+/// TaskCompletionSource<object>, that can be further-
+/// specialized to include custom state associated with 
+/// each instance.
+/// 
+/// See the IdleCompletionSource class for details.
+
 
 namespace Autodesk.AutoCAD.ApplicationServices.AsyncHelpers
 {
+   /// <summary>
+   /// Provides support for asynchronous operations 
+   /// that are driven by the Application.Idle event.
+   /// </summary>
+
    public static class Idle
    {
       /// <summary>
       /// Wraps a handler for the Application.Idle event and
       /// allows the body of the event handler to be expressed 
       /// as code that follows an awaited call to this method.
-      /// 
-      /// The code that follows an awaited call to this method
-      /// is functionally-equivalent to code within the body of
-      /// a handler of the Application.Idle event. This method
-      /// automates the task of adding and removing the handler 
-      /// for the Idle event and from that handler, signaling 
-      /// that the event has been raised, allowing the code that
-      /// follows the awaited call to this method to execute in 
-      /// the context of a handler of the event.
       /// 
       /// Hence, awaited calls to this method will not return 
       /// until the next Idle event is raised and optionally,
@@ -50,7 +58,7 @@ namespace Autodesk.AutoCAD.ApplicationServices.AsyncHelpers
       ///       
       ///       // wait for the next Idle event to be raised:
       ///       
-      ///       await DocMgr.WaitForIdle();
+      ///       await Idle.WaitAsync();
       ///       
       ///       // Code appearing here will not run until 
       ///       // the next Idle event is raised, and there
@@ -62,9 +70,14 @@ namespace Autodesk.AutoCAD.ApplicationServices.AsyncHelpers
       ///       doc.Editor.WriteMessage("An Idle event was raised.");
       ///    }
       ///    
+      /// <remarks>
+      /// if quiescenceRequired is true, documentRequired is 
+      /// not evaluated and is implicitly true.
+      /// If there is no active document, quiescenceRequired
+      /// is not evaluated and is implicitly false.
+      /// </remarks>
       /// </summary>
-      /// <param name="docs">The DocumentCollection</param>
-      /// <param name="quiescentRequired">A value indicating
+      /// <param name="quiescenceRequired">A value indicating
       /// if the method should wait until there is an active
       /// document, and it is in a quiescent state.</param>
       /// <param name="documentRequired">A value indicating if the
@@ -73,24 +86,45 @@ namespace Autodesk.AutoCAD.ApplicationServices.AsyncHelpers
       /// document when the Idle event is raised, the method will
       /// not return until an Idle event is raised and there is
       /// an active document.</param>
+      /// 
       /// <returns>A Task representing the asynchronous operation</returns>
       /// <exception cref="ArgumentNullException"></exception>
 
-      public static Task WaitForIdle(bool quiescentRequired = false,
+      public static Task WaitAsync(
+         bool quiescenceRequired = false,
          bool documentRequired = true)
       {
-         var source = new TaskCompletionSource<object>();
-         Application.Idle += idle;
-         return source.Task;
+         return new IdleCompletionSource(documentRequired, 
+            quiescenceRequired).Task;
+      }
 
-         void idle(object sender, EventArgs e)
-         {
-            if(CanInvoke(quiescentRequired, documentRequired))
-            {
-               Application.Idle -= idle;
-               source.TrySetResult(null);
-            }
-         }
+      /// <summary>
+      /// Simple, no-frills means of asynchrnously waiting 
+      /// until the next Application.Idle event is raised, 
+      /// without conditions.
+      /// </summary>
+      
+      public static Task WaitForIdle()
+      {
+         return new IdleCompletionSource(false, false).Task;
+      }
+
+      /// <summary>
+      /// Waits until there is an active document
+      /// </summary>
+
+      public static Task WaitForDocument()
+      {
+         return new IdleCompletionSource(true, false).Task;
+      }
+
+      /// <summary>
+      /// Waits until there is a quiescent active document
+      /// </summary>
+
+      public static Task WaitForQuiescentDocument()
+      {
+         return new IdleCompletionSource(true, true).Task;
       }
 
       /// <summary>
@@ -105,20 +139,19 @@ namespace Autodesk.AutoCAD.ApplicationServices.AsyncHelpers
       /// execution context is undefined.
       /// </remarks>
       /// </summary>
-      /// <param name="docs">The DocumentCollection</param>
       /// <param name="waitForIdle">A value indicating if the given
       /// predicate should be evaluated immediately when this method
-      /// is called. If this value is true, the predicate will be
+      /// is called. If this value is false, the predicate will be
       /// evaluated before entering into an asynchronous wait state,
       /// and if the predicate evaluates to true, the method returns 
-      /// immediately. If this value is false, the predicate is not 
+      /// immediately. If this value is true, the predicate is not 
       /// evaluated until the first Idle event has been raised. The 
       /// default value is false</param>
       /// <param name="predicate">A predicate that returns a value
       /// indicating if this method should return, or continue to
-      /// handle Idle events. This predicate is evaluated each time
-      /// the Idle event is raised until it returns true, at which 
-      /// point this method returns.</param>
+      /// wait on additional Idle events. This predicate is evaluated 
+      /// each time the Idle event is raised until it returns true, 
+      /// at which point this method returns.</param>
       /// <returns>A Task representing the asynchronous operation</returns>
       /// <exception cref="ArgumentNullException"></exception>
 
@@ -128,23 +161,15 @@ namespace Autodesk.AutoCAD.ApplicationServices.AsyncHelpers
             throw new ArgumentNullException(nameof(predicate));
          if(!waitForIdle && predicate())
             return Task.CompletedTask;
-         var source = new TaskCompletionSource<object>();
-         Application.Idle += idle;
-         return source.Task;
-
-         void idle(object sender, EventArgs e)
-         {
-            if(predicate())
-            {
-               Application.Idle -= idle;
-               source.TrySetResult(null);
-            }
-         }
+         else
+            return new IdleCompletionSource(predicate).Task;
       }
 
       /// <summary>
-      /// Overload of the above that passes a default
-      /// value of false for the waitForIdle argument.
+      /// Overload of WaitUntil() that passes a default value
+      /// of false for the waitForIdle argument, causing it to
+      /// evaluate the predicate immediately, and short-circuit 
+      /// the asynchronous wait if the predicate returns true.
       /// </summary>
 
       public static Task WaitUntil(Func<bool> predicate)
@@ -156,21 +181,12 @@ namespace Autodesk.AutoCAD.ApplicationServices.AsyncHelpers
       /// An overloaded version of WaitUntil() that requires
       /// a predicate that takes a Document as an argument.
       ///
-      /// Waits until the supplied predicate returns true 
-      /// and there is an active document. The predicate is
+      /// Waits until there is an active document, and the
+      /// supplied predicate returns true. The predicate is
       /// passed the Document that is active at the point 
       /// when the predicate is invoked. That may not be the
       /// same document that was active when this method was
       /// called.
-      /// 
-      /// Notes: 
-      /// 
-      /// If there is an active document when this method 
-      /// is called, the method will evaluate the predicate 
-      /// before entering an asynchronous wait state, and if 
-      /// the predicate returns true, this method returns 
-      /// immediately, without entering an asynchronous wait 
-      /// state.
       /// 
       /// Usage:
       /// <code>
@@ -182,7 +198,7 @@ namespace Autodesk.AutoCAD.ApplicationServices.AsyncHelpers
       ///       // Waits until there is an active document
       ///       // that is in a quiescent state:
       ///       
-      ///       await DocMgr.WaitUntil(doc => doc.Editor.IsQuiescent);
+      ///       await Idle.WaitUntil(doc => doc.Editor.IsQuiescent);
       ///       
       ///       // Code appearing here will not run until 
       ///       // the next Idle event is raised; there is
@@ -196,74 +212,42 @@ namespace Autodesk.AutoCAD.ApplicationServices.AsyncHelpers
       /// </code>
       /// <remarks>
       /// If this method is called at startup (such as from an
-      /// IExtensionApplication.Initialize) method, it can use
+      /// IExtensionApplication.Initialize() method), it can use
       /// the default value of documentRequired (true), to wait 
       /// for an active document before evaluating the predicate.
       /// 
-      /// Caveats:
-      /// 
-      /// If this method is called from the document execution
-      /// context (which is not recommended), code that follows 
-      /// the awaited call executes in the application context.
+      /// The behavior of this method if called from the document 
+      /// execution context is undefined.
       /// 
       /// </remarks>
       /// </summary>
-      /// <param name="docs">The DocumentsCollection</param>
       /// <param name="predicate">A method taking a Document 
       /// as its argument, that returns a value indicating if
       /// this method should return, or continue to wait.
-      /// The predicate will be evaluated immediately upon
-      /// calling this method, and if it returns true, this
-      /// method returns immediately. Otherwise, the predicate 
-      /// will be evaluated each time the Idle event is raised, 
-      /// and this method will not return until the predicate
-      /// returns true.</param>
-      /// <param name="documentRequired">A value indicating if the 
-      /// given predicate should be evaluated if there is no active
-      /// document. If this value is false and there is no active
-      /// document, the predicate will be passed null, and should
-      /// check its argument before attempting to use it. If this
-      /// value is true, the predicate is not called if there is
-      /// no active document and this method will continue to wait.
-      /// The default value is true</param>
+      /// </param>
       /// <param name="waitForIdle">A value indicating if the given
       /// predicate should be evaluated immediately when this method
-      /// is called. If this value is true, the predicate will be
+      /// is called. If this value is false, the predicate will be
       /// evaluated when this method is called, before entering into
       /// an asynchronous wait state. If the predicate evaluates to 
       /// true, the method returns immediately without entering into
-      /// the asynchronous wait state. If this value is false, the
+      /// the asynchronous wait state. If this value is true, the
       /// predicate is not evaluated until the first Idle event has
       /// been raised. The default value is true.</param>
       /// <returns>A Task representing the asynchronous operation</returns>
       /// <exception cref="ArgumentNullException"></exception>
 
       public static Task WaitUntil(Func<Document, bool> predicate,
-         bool documentRequired = true,
          bool waitForIdle = true)
       {
          if(predicate == null)
             throw new ArgumentNullException(nameof(predicate));
-         if(!waitForIdle && Evaluate())
+         Document doc = ActiveDocument;
+         if(!waitForIdle && doc != null && predicate(doc))
             return Task.CompletedTask;
-         var source = new TaskCompletionSource<object>();
-         Application.Idle += idle;
-         return source.Task;
-
-         bool Evaluate()
-         {
-            Document doc = Application.DocumentManager.MdiActiveDocument;
-            return (!documentRequired || doc != null) && predicate(doc);
-         }
-
-         void idle(object sender, EventArgs e)
-         {
-            if(Evaluate())
-            {
-               Application.Idle -= idle;
-               source.TrySetResult(null);
-            }
-         }
+         else
+            return new IdleCompletionSource(() =>
+               ActiveDocument != null && predicate(ActiveDocument)).Task;
       }
 
       /// <summary>
@@ -276,21 +260,78 @@ namespace Autodesk.AutoCAD.ApplicationServices.AsyncHelpers
       /// the operation</param>
       /// <remarks>
       /// if quiescent is true, document is not evaluated
-      /// and is implicitly true.
+      /// and is effectively true.
       /// If there is no active document, quiescent is not 
-      /// evaluated and is implicitly false.
+      /// evaluated and is effectively false.
       /// </remarks>
       /// </summary>
 
       public static bool CanInvoke(bool quiescent = false, bool document = true)
       {
          document |= quiescent;
-         Document doc = Application.DocumentManager.MdiActiveDocument;
+         Document doc = ActiveDocument;
          return doc == null ? !document
             : !quiescent || doc.Editor.IsQuiescent;
       }
 
+      static readonly DocumentCollection docs = Application.DocumentManager;
       static Document ActiveDocument => Application.DocumentManager.MdiActiveDocument;
 
+   }
+
+   /// <summary>
+   /// Can be used in place of the base type to simplify 
+   /// asynchronous wait-for-idle operations, and perform
+   /// custom conditional testing to determine if waiting
+   /// should continue, and associate custom state with 
+   /// each instance if needed.
+   /// </summary>
+
+   public class IdleCompletionSource : TaskCompletionSource<object>
+   {
+      Func<bool> predicate = null;
+
+      public IdleCompletionSource(
+         bool documentRequired = true, 
+         bool quiescentRequired = false)
+      {
+         predicate = () => Idle.CanInvoke(documentRequired, quiescentRequired);
+         Application.Idle += idle;
+      }
+
+      public IdleCompletionSource(Func<bool> predicate)
+      {
+         if(predicate == null)
+            throw new ArgumentNullException(nameof(predicate));
+         this.predicate = predicate;
+         Application.Idle += idle;
+      }
+
+      /// <summary>
+      /// Can be overridden to perform custom/additional
+      /// conditional testing to determine if asynchronous
+      /// wait should end. 
+      /// 
+      /// This default implementation for an instance 
+      /// created with the default constructor signals 
+      /// completion if there is an active document.
+      /// </summary>
+
+      protected virtual bool IsCompleted
+      {
+         get
+         {
+            return predicate();
+         }
+      }
+
+      private void idle(object sender, EventArgs e)
+      {
+         if(IsCompleted)
+         {
+            Application.Idle -= idle;
+            TrySetResult(null);
+         }
+      }
    }
 }
