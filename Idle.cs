@@ -341,14 +341,6 @@ namespace Autodesk.AutoCAD.ApplicationServices.AsyncHelpers
       }
    }
 
-   public static class Foo
-   {
-      public static async void Main()
-      {
-         await IdleAwaiter.WaitForIdle();
-         Application.DocumentManager.MdiActiveDocument.Editor.WriteMessage("\nAn Idle event just occured");
-      }
-   }
 
    /// <summary>
    /// An alternative means of doing what the methods of the 
@@ -378,7 +370,7 @@ namespace Autodesk.AutoCAD.ApplicationServices.AsyncHelpers
          }
       }
 
-      public static IdleAwaiter WaitForIdle()
+      public static IdleAwaiter WaitOne()
       {
          return new IdleAwaiter();
       }
@@ -397,5 +389,4 @@ namespace Autodesk.AutoCAD.ApplicationServices.AsyncHelpers
             Application.Idle += idle;
       }
    }
-
 }
