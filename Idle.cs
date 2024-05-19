@@ -1,4 +1,7 @@
 ﻿using System;
+using System.Collections.Concurrent;
+using System.Runtime.CompilerServices;
+using System.Threading;
 using System.Threading.Tasks;
 
 /// Idle.cs  ActivistInvestor / Tony Tanzillo
@@ -12,7 +15,7 @@ using System.Threading.Tasks;
 /// 
 ///    https://github.com/ActivistInvestor/AcMgdUtility/blob/main/Idle.cs
 ///
-/// 05/12/24 Major refactoring:
+/// 05/12/24: Major refactoring
 /// 
 /// This unit was refactored to address a shortcoming
 /// in the original design, which did not permit custom
@@ -23,6 +26,8 @@ using System.Threading.Tasks;
 /// each instance.
 /// 
 /// See the IdleCompletionSource class for details.
+/// 
+/// O5/17/24: Implementation of the IdleAwaiter class
 
 
 namespace Autodesk.AutoCAD.ApplicationServices.AsyncHelpers
@@ -94,16 +99,16 @@ namespace Autodesk.AutoCAD.ApplicationServices.AsyncHelpers
          bool quiescenceRequired = false,
          bool documentRequired = true)
       {
-         return new IdleCompletionSource(documentRequired, 
-            quiescenceRequired).Task;
+         return new IdleCompletionSource(quiescenceRequired,
+            documentRequired).Task;
       }
 
       /// <summary>
       /// Simple, no-frills means of asynchrnously waiting 
       /// until the next Application.Idle event is raised, 
-      /// without conditions.
+      /// with no conditions.
       /// </summary>
-      
+
       public static Task WaitForIdle()
       {
          return new IdleCompletionSource(false, false).Task;
@@ -115,7 +120,7 @@ namespace Autodesk.AutoCAD.ApplicationServices.AsyncHelpers
 
       public static Task WaitForDocument()
       {
-         return new IdleCompletionSource(true, false).Task;
+         return new IdleCompletionSource(false, true).Task;
       }
 
       /// <summary>
@@ -140,18 +145,18 @@ namespace Autodesk.AutoCAD.ApplicationServices.AsyncHelpers
       /// </remarks>
       /// </summary>
       /// <param name="waitForIdle">A value indicating if the given
-      /// predicate should be evaluated immediately when this method
-      /// is called. If this value is false, the predicate will be
-      /// evaluated before entering into an asynchronous wait state,
-      /// and if the predicate evaluates to true, the method returns 
-      /// immediately. If this value is true, the predicate is not 
-      /// evaluated until the first Idle event has been raised. The 
-      /// default value is false</param>
+      /// predicate should not be evaluated until the next idle event 
+      /// is raised. If this value is false, the predicate will be 
+      /// evaluated immediately upon calling this method, before it
+      /// enters an asynchronous wait state, and if the predicate 
+      /// evaluates to true, the method returns immediately. If this 
+      /// value is true, the predicate is not evaluated until the 
+      /// next Idle event is raised. The default value is false</param>
       /// <param name="predicate">A predicate that returns a value
       /// indicating if this method should return, or continue to
-      /// wait on additional Idle events. This predicate is evaluated 
-      /// each time the Idle event is raised until it returns true, 
-      /// at which point this method returns.</param>
+      /// wait for additional Idle events to be raised. The predicate 
+      /// is evaluated each time the Idle event is raised, until it 
+      /// returns true, at which point this method returns.</param>
       /// <returns>A Task representing the asynchronous operation</returns>
       /// <exception cref="ArgumentNullException"></exception>
 
@@ -283,7 +288,7 @@ namespace Autodesk.AutoCAD.ApplicationServices.AsyncHelpers
    /// Can be used in place of the base type to simplify 
    /// asynchronous wait-for-idle operations, and perform
    /// custom conditional testing to determine if waiting
-   /// should continue, and associate custom state with 
+   /// should continue, and to associate custom state with 
    /// each instance if needed.
    /// </summary>
 
@@ -292,8 +297,8 @@ namespace Autodesk.AutoCAD.ApplicationServices.AsyncHelpers
       Func<bool> predicate = null;
 
       public IdleCompletionSource(
-         bool documentRequired = true, 
-         bool quiescentRequired = false)
+         bool quiescentRequired = false,
+         bool documentRequired = true)
       {
          predicate = () => Idle.CanInvoke(documentRequired, quiescentRequired);
          Application.Idle += idle;
@@ -314,7 +319,8 @@ namespace Autodesk.AutoCAD.ApplicationServices.AsyncHelpers
       /// 
       /// This default implementation for an instance 
       /// created with the default constructor signals 
-      /// completion if there is an active document.
+      /// completion if there is an active document,
+      /// quiescent or not.
       /// </summary>
 
       protected virtual bool IsCompleted
@@ -334,4 +340,62 @@ namespace Autodesk.AutoCAD.ApplicationServices.AsyncHelpers
          }
       }
    }
+
+   public static class Foo
+   {
+      public static async void Main()
+      {
+         await IdleAwaiter.WaitForIdle();
+         Application.DocumentManager.MdiActiveDocument.Editor.WriteMessage("\nAn Idle event just occured");
+      }
+   }
+
+   /// <summary>
+   /// An alternative means of doing what the methods of the 
+   /// Idle.WaitForIdle() method does, with greater control 
+   /// over how awaited continuation statements execute, but 
+   /// lacking any means to conditionally wait.
+   /// 
+   /// If there are multiple actions queued up, only one of 
+   /// them is dequeued and invoked on each call to the Idle 
+   /// event handler, so as to not impair UI responsiveness.
+   /// </summary>
+   
+   public struct IdleAwaiter : INotifyCompletion
+   {
+      static ConcurrentQueue<Action> actions = new ConcurrentQueue<Action>();
+
+      static void idle(object sender, EventArgs e)
+      {
+         Action action = null;
+         bool flag = actions.Count > 0;
+         if(flag && actions.TryDequeue(out action) && action != null)
+         {
+            if(actions.Count == 0)
+               Application.Idle -= idle;
+            SynchronizationContext.Current.Post(
+               state => ((Action)state)(), action);
+         }
+      }
+
+      public static IdleAwaiter WaitForIdle()
+      {
+         return new IdleAwaiter();
+      }
+
+      public IdleAwaiter GetAwaiter() { return this; }
+
+      public bool IsCompleted { get { return false; } }
+
+      public void GetResult() { }
+
+      public void OnCompleted(Action continuation)
+      {
+         bool flag = actions.Count == 0;
+         actions.Enqueue(continuation);
+         if(flag && actions.Count > 0)
+            Application.Idle += idle;
+      }
+   }
+
 }
