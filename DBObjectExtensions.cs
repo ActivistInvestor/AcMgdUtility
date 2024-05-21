@@ -10,7 +10,7 @@
 ///     
 /// A collection of some old helper APIs that support 
 /// access/querying of the contents of AutoCAD drawings 
-/// using LINQ
+/// using LINQ.
 
 using System;
 using System.Collections;
@@ -21,6 +21,20 @@ using Autodesk.AutoCAD.Runtime;
 
 namespace Autodesk.AutoCAD.DatabaseServices.Linq
 {
+   /// <summary>
+   /// Notes: These types do not deal gracefully with
+   /// attempts to open entities that reside on locked 
+   /// for write. The recommended practice is to open
+   /// entities for read, and then determine if they
+   /// can or should be upgraded to OpenMode.ForWrite, 
+   /// based on whether the referenced layer is locked, 
+   /// and the specifics of the use case.
+   /// 
+   /// The included UpgradeOpen<T>() method can be used 
+   /// to forcibly upgrade an entity's open mode to write
+   /// if the entity resides on a locked layer.
+   /// </summary>
+
    public static partial class DBObjectExtensions
    {
       /// <summary>
@@ -31,7 +45,9 @@ namespace Autodesk.AutoCAD.DatabaseServices.Linq
       /// methods that delegate to this method are typical.
       /// </summary>
       /// <typeparam name="T">The type of DBObject to enumerate</typeparam>
-      /// <param name="ids">An IEnumerable that enumerates ObjectIds</param>
+      /// <typeparam name="TBase">The common base type of all elements
+      /// that appear in the source</typeparam>
+      /// <param name="source">An IEnumerable that enumerates ObjectIds</param>
       /// <param name="trans">The transaction to use in the operation</param>
       /// <param name="mode">The OpenMode to open objects with</param>
       /// <param name="exact">A value indicating if enumerated objects must 
@@ -42,21 +58,35 @@ namespace Autodesk.AutoCAD.DatabaseServices.Linq
       /// <returns>A sequence of opened DBObjects</returns>
       /// <exception cref="ArgumentNullException"></exception>
 
-      static IEnumerable<T> GetObjectsCore<T>(IEnumerable ids, Transaction trans,
-         OpenMode mode = OpenMode.ForRead,
-         bool exact = false,
-         bool openErased = false,
-         bool openLocked = false) where T : DBObject
+      static IEnumerable<T> GetObjects<TBase, T>(IEnumerable source, 
+            Transaction trans,
+            OpenMode mode = OpenMode.ForRead,
+            bool exact = false,
+            bool openErased = false,
+            bool openLocked = false) 
+
+         where TBase : DBObject 
+         where T : TBase 
       {
-         if(ids == null)
-            throw new ArgumentNullException(nameof(ids));
+         if(source == null)
+            throw new ArgumentNullException(nameof(source));
          if(trans == null)
             throw new ArgumentNullException(nameof(trans));
-         Func<ObjectId, bool> predicate = GetObjectIdPredicate<T>(exact);
-         foreach(ObjectId id in ids)
+         if(typeof(T) != typeof(TBase))
          {
-            if(predicate(id))
+            Func<ObjectId, bool> predicate = GetObjectIdPredicate<T>(exact);
+            foreach(ObjectId id in source)
+            {
+               if(predicate(id))
+                  yield return (T)trans.GetObject(id, mode, openErased, openLocked);
+            }
+         }
+         else
+         {
+            foreach(ObjectId id in source)
+            {
                yield return (T)trans.GetObject(id, mode, openErased, openLocked);
+            }
          }
       }
 
@@ -95,87 +125,98 @@ namespace Autodesk.AutoCAD.DatabaseServices.Linq
       }
 
       /// <summary>
-      /// Allows the delegates returned by the above
-      /// method to avoid having to capture a local 
-      /// variable (faster than referencing same).
-      /// </summary>
-
-      public static class RXClass<T> where T : RXObject
-      {
-         public static readonly RXClass Value = RXObject.GetClass(typeof(T));
-      }
-
-      /// <summary>
       /// A version of GetObjects() that targets BlockTableRecords,
       /// and enumerates block entities.
       /// </summary>
-      /// <param name="blockTableRecord">The BlockTableRecord from
+      /// <param name="source">The BlockTableRecord from
       /// which to retrieve the entities from.</param>
       /// 
-      /// See the GetObjectsCore<T>() method for a desription of 
+      /// See the GetObjects<TBase, T>() method for a desription of 
       /// all other parameters.
 
-      public static IEnumerable<T> GetObjects<T>(this BlockTableRecord blockTableRecord,
-            Transaction tr,
+      public static IEnumerable<T> GetObjects<T>(this BlockTableRecord source,
+            Transaction trans,
             OpenMode mode = OpenMode.ForRead,
             bool exact = false,
             bool openLocked = false) where T : Entity
       {
-         if(blockTableRecord == null)
-            throw new ArgumentNullException(nameof(blockTableRecord));
-         return GetObjectsCore<T>(blockTableRecord, tr, mode, exact, false, openLocked);
+         return GetObjects<Entity, T>(source, trans, mode, exact, false, openLocked);
       }
 
       /// <summary>
-      /// A version of GetObjects() that targets ObjectIdCollection,
-      /// that enumerates the DBObjects represented by the ObjectIds
-      /// in the collection.
+      /// A version of GetObjects() targeting ObjectIdCollection,
+      /// that enumerates DBObjects represented by the ObjectIds
+      /// in the source collection.
       /// </summary>
-      /// <param name="ids">The ObjectIdCollection containing the
+      /// <param name="source">The ObjectIdCollection containing the
       /// ObjectIds of the objects to be opened and returned</param>
       /// 
-      /// See the GetObjectsCore<T>() method for a desription of 
+      /// See the GetObjects<T, TBase>() method for a desription of 
       /// all other parameters.
 
-      public static IEnumerable<T> GetObjects<T>(this ObjectIdCollection ids,
-            Transaction tr,
+      public static IEnumerable<T> GetObjects<T>(this ObjectIdCollection source,
+            Transaction trans,
             OpenMode mode = OpenMode.ForRead,
             bool exact = false,
             bool openLocked = false)
          where T : DBObject
       {
-         if(ids == null)
-            throw new ArgumentNullException(nameof(ids));
-         return GetObjectsCore<T>(ids, tr, mode, exact, false, openLocked);
+         return GetObjects<DBObject, T>(source, trans, mode, exact, false, openLocked);
+      }
+
+      /// <summary>
+      /// Can be used like the above method when it can be 
+      /// assumed that all elements in the ObjectIdCollection 
+      /// represent an Entity or a type derived from same.
+      /// </summary>
+
+      public static IEnumerable<Entity> GetEntities(this ObjectIdCollection source,
+            Transaction trans,
+            OpenMode mode = OpenMode.ForRead,
+            bool exact = false,
+            bool openLocked = false)
+      {
+         return GetObjects<Entity, Entity>(source, trans, mode, exact, false, openLocked);
       }
 
       /// <summary>
       /// A version of GetObjects() that targets IEnumerable<ObjectId>
       /// that enumerates the DBObjects represented by the ObjectIds
       /// in the sequence.
+      /// 
+      /// The GetEntities() variant can be used when it can 
+      /// be assumed that all elements in the source sequence 
+      /// represent an Entity or a type derived from same.
       /// </summary>
       /// <parm name="ids">The sequence of ObjectIds that are to 
       /// be opened and returned</parm>
       /// 
-      /// See the GetObjectsCore<T>() method for a desription of 
+      /// See the GetObjects<TBase, T>() method for a desription of 
       /// all other parameters.
 
-      public static IEnumerable<T> GetObjects<T>(this IEnumerable<ObjectId> ids,
-            Transaction tr,
+      public static IEnumerable<T> GetObjects<T>(this IEnumerable<ObjectId> source,
+            Transaction trans,
             OpenMode mode = OpenMode.ForRead,
             bool exact = false,
             bool openLocked = false) where T : DBObject
       {
-         if(ids == null)
-            throw new ArgumentNullException(nameof(ids));
-         return GetObjectsCore<T>(ids, tr, mode, exact, false, openLocked);
+         return GetObjects<DBObject, T>(source, trans, mode, exact, false, openLocked);
+      }
+
+      public static IEnumerable<Entity> GetEntities(this IEnumerable<ObjectId> source,
+            Transaction trans,
+            OpenMode mode = OpenMode.ForRead,
+            bool exact = false,
+            bool openLocked = false) 
+      {
+         return GetObjects<Entity, Entity>(source, trans, mode, exact, false, openLocked);
       }
 
       /// <summary>
       /// An overload of GetObjects() that targets SymbolTables,
-      /// that enumerates the table's SymbolTableRecords.
+      /// and enumerates the table's SymbolTableRecords.
       /// </summary>
-      /// <param name="table">The SymbolTable whose contents are
+      /// <param name="source">The SymbolTable whose contents are
       /// to be opened and enumerated</param>
       /// <param name="includingErased">A value indicating if
       /// erased entries should be included.</param>
@@ -184,17 +225,53 @@ namespace Autodesk.AutoCAD.DatabaseServices.Linq
       /// to this method, as it will access that property internally
       /// if the includingErased argument is true.
       /// 
-      /// See the GetObjectsCore<T>() method for a desription of 
+      /// See the GetObjects<TBase, T>() method for a desription of 
       /// all other parameters.
 
-      public static IEnumerable<T> GetObjects<T>(this SymbolTable table,
-         Transaction tr,
+      public static IEnumerable<T> GetObjects<T>(this SymbolTable source,
+         Transaction trans,
          OpenMode mode = OpenMode.ForRead,
          bool includingErased = false) where T : SymbolTableRecord
       {
          if(includingErased)
-            table = table.IncludingErased;
-         return GetObjectsCore<T>(table, tr, mode, includingErased, false);
+            source = source.IncludingErased;
+         return GetObjects<T, T>(source, trans, mode, includingErased, false);
+      }
+
+      /// <summary>
+      /// Returns a sequence of SymbolTableRecord-based types
+      /// from the Database, where the symbol table is determined
+      /// by the generic argument type. E.g., to get records from
+      /// the layer table, specify LayerTableRecord as the generic
+      /// argument type.
+      /// </summary>
+      /// <typeparam name="T">The type of SymbolTableRecord to be
+      /// returned, which also determines which SymbolTable is to 
+      /// be accessed. This must be a concrete type derived from 
+      /// the SymbolTableRecord type.</typeparam>
+      /// <param name="db">The Database to access</param>
+      /// <param name="trans">The transaction to use for the operation</param>
+      /// <param name="mode">The OpenMode to open resulting objects in</param>
+      /// <param name="includingErased">A value indicating if erased
+      /// SymbolTableRecords should be included</param>
+      /// <returns>A sequence of SymbolTableRecord-based elements</returns>
+
+      public static IEnumerable<T> GetRecords<T>(this Database db, 
+         Transaction trans, 
+         OpenMode mode = OpenMode.ForRead,
+         bool includingErased = false) where T : SymbolTableRecord
+      {
+         if(db == null)
+            throw new ArgumentNullException(nameof(db));
+         if(trans == null)
+            throw new ArgumentNullException(nameof(trans));
+         if(typeof(T) == typeof(SymbolTableRecord))
+            throw new ArgumentException("Invalid SymbolTableRecord type");
+         Func<Database, ObjectId> func;
+         if(!tableAccessors.TryGetValue(typeof(T), out func))
+            throw new ArgumentException($"Invalid SymbolTableRecord type: {typeof(T).Name}");
+         return func(db).GetObject<SymbolTable>(trans)
+            .GetObjects<T>(trans, mode, includingErased);
       }
 
       /// <summary>
@@ -213,29 +290,29 @@ namespace Autodesk.AutoCAD.DatabaseServices.Linq
       /// <param name="ownerId">The ObjectId of a DBObject that
       /// enumerates ObjectIds</param>
       /// 
-      /// See the GetObjectsCore<T>() method for a desription of 
+      /// See the GetObjects<TBase, T>() method for a desription of 
       /// all other parameters.
 
-      static IEnumerable<T> GetObjects<T>(ObjectId ownerId,
-         Transaction tr,
-         OpenMode mode = OpenMode.ForRead,
-         bool exact = false,
-         bool openLocked = false) where T : DBObject
-      {
-         if(tr == null)
-            throw new ArgumentNullException(nameof(tr));
-         if(ownerId.IsNull)
-            throw new ArgumentNullException(nameof(ownerId));
-         DBObject owner = tr.GetObject(ownerId, OpenMode.ForRead, false, false);
-         if(!(owner is IEnumerable enumerable))
-            throw new ArgumentException($"Owner not enumerable: {owner.GetType().Name}");
-         var first = enumerable.First();
-         if(first == null)
-            return Enumerable.Empty<T>();
-         if(!(first is ObjectId id))
-            throw new ArgumentException($"Invalid element type: {first?.GetType().Name ?? "(null)"}");
-         return GetObjectsCore<T>(enumerable, tr, mode, exact, false, openLocked);
-      }
+      //static IEnumerable<T> GetObjects<T>(ObjectId ownerId,
+      //   Transaction tr,
+      //   OpenMode mode = OpenMode.ForRead,
+      //   bool exact = false,
+      //   bool openLocked = false) where T : DBObject
+      //{
+      //   if(tr == null)
+      //      throw new ArgumentNullException(nameof(tr));
+      //   if(ownerId.IsNull)
+      //      throw new ArgumentNullException(nameof(ownerId));
+      //   DBObject owner = tr.GetObject(ownerId, OpenMode.ForRead, false, false);
+      //   if(!(owner is IEnumerable enumerable))
+      //      throw new ArgumentException($"Owner not enumerable: {owner.GetType().Name}");
+      //   var first = enumerable.First();
+      //   if(first == null)
+      //      return Enumerable.Empty<T>();
+      //   if(!(first is ObjectId id))
+      //      throw new ArgumentException($"Invalid element type: {first?.GetType().Name ?? "(null)"}");
+      //   return GetObjects<DBObject, T>(enumerable, tr, mode, exact, false, openLocked);
+      //}
 
       /// <summary>
       /// Upgrades the OpenMode of a sequence of DBObjects to
@@ -323,7 +400,7 @@ namespace Autodesk.AutoCAD.DatabaseServices.Linq
       /// <typeparam name="T">The type of entity to return</typeparam>
       /// <param name="db">The target Database</param>
       /// 
-      /// See the GetObjectsCore<T>() method for a desription of 
+      /// See the GetObjects<TBase, T>() method for a desription of 
       /// all other parameters.
       /// <exception cref="ArgumentNullException"></exception>
 
@@ -365,7 +442,7 @@ namespace Autodesk.AutoCAD.DatabaseServices.Linq
       /// <typeparam name="T">The type of entity to return</typeparam>
       /// <param name="db">The target Database</param>
       /// 
-      /// See the GetObjectsCore<T>() method for a desription of 
+      /// See the GetObjects<TBase, T>() method for a desription of 
       /// all other parameters.
       /// <exception cref="ArgumentNullException"></exception>
 
@@ -404,7 +481,7 @@ namespace Autodesk.AutoCAD.DatabaseServices.Linq
       /// <typeparam name="T">The type of objects to enumerate</typeparam>
       /// <param name="db">The Database to obtain the objects from</param>
       /// 
-      /// See the GetObjectsCore<T>() method for a desription of 
+      /// See the GetObjects<TBase, T>() method for a desription of 
       /// all other parameters.
 
       public static IEnumerable<T> GetPaperSpaceObjects<T>(this Database db,
@@ -426,7 +503,7 @@ namespace Autodesk.AutoCAD.DatabaseServices.Linq
 
       /// <summary>
       /// Get all references to the given BlockTableRecord,
-      /// including dynamic block references.
+      /// including anonymous dynamic block references.
       /// </summary>
 
       public static IEnumerable<BlockReference> GetBlockReferences(
@@ -464,7 +541,7 @@ namespace Autodesk.AutoCAD.DatabaseServices.Linq
 
       /// <summary>
       /// Returns a sequence containing all BlockReferences in
-      /// the Database, whose names match the given pattern.
+      /// the given Database whose names match the given pattern.
       /// 
       /// Anonymous dynamic block references are included if the
       /// dynamic block definition's name matches the pattern.
@@ -608,11 +685,39 @@ namespace Autodesk.AutoCAD.DatabaseServices.Linq
          }
       }
 
+      static Dictionary<Type, Func<Database, ObjectId>> tableAccessors
+         = new Dictionary<Type, Func<Database, ObjectId>>();
+
+      static DBObjectExtensions()
+      {
+         tableAccessors[typeof(BlockTableRecord)] = db => db.BlockTableId;
+         tableAccessors[typeof(LayerTableRecord)] = db => db.LayerTableId;
+         tableAccessors[typeof(LinetypeTableRecord)] = db => db.LinetypeTableId;
+         tableAccessors[typeof(ViewportTableRecord)] = db => db.ViewportTableId;
+         tableAccessors[typeof(ViewTableRecord)] = db => db.ViewTableId;
+         tableAccessors[typeof(DimStyleTableRecord)] = db => db.DimStyleTableId;
+         tableAccessors[typeof(RegAppTableRecord)] = db => db.RegAppTableId;
+         tableAccessors[typeof(TextStyleTableRecord)] = db => db.TextStyleTableId;
+         tableAccessors[typeof(UcsTableRecord)] = db => db.UcsTableId;
+      }
+
    }
 
+}
 
+namespace Autodesk.AutoCAD.Runtime
+{
+   /// <summary>
+   /// Allows the delegates returned by methodsthat use an 
+   /// RXClass to avoid having to capture a local variable,
+   /// and eliminates the overhead of repeated calls to the
+   /// RXObject.GetClass() method with the same argument.
+   /// </summary>
 
-
+   public static partial class RXClass<T> where T : RXObject
+   {
+      public static readonly RXClass Value = RXObject.GetClass(typeof(T));
+   }
 }
 
 
