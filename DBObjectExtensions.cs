@@ -24,15 +24,18 @@ namespace Autodesk.AutoCAD.DatabaseServices.Linq
    /// <summary>
    /// Notes: These types do not deal gracefully with
    /// attempts to open entities that reside on locked 
-   /// for write. The recommended practice is to open
-   /// entities for read, and then determine if they
-   /// can or should be upgraded to OpenMode.ForWrite, 
-   /// based on whether the referenced layer is locked, 
-   /// and the specifics of the use case.
+   /// layers for write. 
+   /// 
+   /// The recommended practice is to open entities for 
+   /// read, and then determine if they can or should be 
+   /// upgraded to OpenMode.ForWrite, based on whether 
+   /// the referenced layer is locked, and the specifics 
+   /// of the use case.
    /// 
    /// The included UpgradeOpen<T>() method can be used 
-   /// to forcibly upgrade an entity's open mode to write
-   /// if the entity resides on a locked layer.
+   /// with a transaction to forcibly-upgrade an entity's 
+   /// open mode to write even if the entity resides on a 
+   /// locked layer.
    /// </summary>
 
    public static partial class DBObjectExtensions
@@ -72,6 +75,8 @@ namespace Autodesk.AutoCAD.DatabaseServices.Linq
             throw new ArgumentNullException(nameof(source));
          if(trans == null)
             throw new ArgumentNullException(nameof(trans));
+         if(source is DBObject dbObj)
+            CheckTransaction(dbObj.Database, trans);
          if(typeof(T) != typeof(TBase))
          {
             Func<ObjectId, bool> predicate = GetObjectIdPredicate<T>(exact);
@@ -99,7 +104,7 @@ namespace Autodesk.AutoCAD.DatabaseServices.Linq
       /// 
       /// The returned predicate uses a generic type that stores
       /// the runtime class associated with the generic argument
-      /// type, that allows it to avoid a costly local variable 
+      /// type, allowing it to avoid an expensive local variable 
       /// capture.
       /// 
       /// In the method, 'RXClass<T>.Value' is merely a reference
@@ -138,7 +143,8 @@ namespace Autodesk.AutoCAD.DatabaseServices.Linq
             Transaction trans,
             OpenMode mode = OpenMode.ForRead,
             bool exact = false,
-            bool openLocked = false) where T : Entity
+            bool openLocked = false) 
+         where T : Entity
       {
          return GetObjects<Entity, T>(source, trans, mode, exact, false, openLocked);
       }
@@ -168,13 +174,20 @@ namespace Autodesk.AutoCAD.DatabaseServices.Linq
       /// Can be used like the above method when it can be 
       /// assumed that all elements in the ObjectIdCollection 
       /// represent an Entity or a type derived from same.
+      /// 
+      /// This method can be used when the requested type is
+      /// Entity, but should not be used if only a subset of
+      /// the source entities should be returned, consisting
+      /// of a specific derived type (use GetObjects<T>() in
+      /// that case, with the derived type specified as the
+      /// generic argument).
       /// </summary>
 
       public static IEnumerable<Entity> GetEntities(this ObjectIdCollection source,
-            Transaction trans,
-            OpenMode mode = OpenMode.ForRead,
-            bool exact = false,
-            bool openLocked = false)
+         Transaction trans,
+         OpenMode mode = OpenMode.ForRead,
+         bool exact = false,
+         bool openLocked = false)
       {
          return GetObjects<Entity, Entity>(source, trans, mode, exact, false, openLocked);
       }
@@ -186,13 +199,14 @@ namespace Autodesk.AutoCAD.DatabaseServices.Linq
       /// 
       /// The GetEntities() variant can be used when it can 
       /// be assumed that all elements in the source sequence 
-      /// represent an Entity or a type derived from same.
+      /// represent an Entity or a type derived from same, and
+      /// the requested type of the resulting sequence is Entity.
       /// </summary>
-      /// <parm name="ids">The sequence of ObjectIds that are to 
-      /// be opened and returned</parm>
+      /// <parm name="ids">The sequence of ObjectIds representing
+      /// the entities that are to be opened and returned</parm>
       /// 
-      /// See the GetObjects<TBase, T>() method for a desription of 
-      /// all other parameters.
+      /// See the GetObjects<TBase, T>() method for a description 
+      /// of all other parameters.
 
       public static IEnumerable<T> GetObjects<T>(this IEnumerable<ObjectId> source,
             Transaction trans,
@@ -225,14 +239,17 @@ namespace Autodesk.AutoCAD.DatabaseServices.Linq
       /// to this method, as it will access that property internally
       /// if the includingErased argument is true.
       /// 
-      /// See the GetObjects<TBase, T>() method for a desription of 
-      /// all other parameters.
+      /// See the GetObjects<TBase, T>() method for a description 
+      /// of all other parameters.
 
       public static IEnumerable<T> GetObjects<T>(this SymbolTable source,
          Transaction trans,
          OpenMode mode = OpenMode.ForRead,
          bool includingErased = false) where T : SymbolTableRecord
       {
+         if(source == null)
+            throw new ArgumentNullException(nameof(source));
+         CheckTransaction(source.Database, trans);
          if(includingErased)
             source = source.IncludingErased;
          return GetObjects<T, T>(source, trans, mode, includingErased, false);
@@ -261,12 +278,9 @@ namespace Autodesk.AutoCAD.DatabaseServices.Linq
          OpenMode mode = OpenMode.ForRead,
          bool includingErased = false) where T : SymbolTableRecord
       {
-         if(db == null)
-            throw new ArgumentNullException(nameof(db));
-         if(trans == null)
-            throw new ArgumentNullException(nameof(trans));
+         CheckTransaction(db, trans);
          if(typeof(T) == typeof(SymbolTableRecord))
-            throw new ArgumentException("Invalid SymbolTableRecord type");
+            throw new ArgumentException("Requires a type derived from SymbolTableRecord");
          Func<Database, ObjectId> func;
          if(!tableAccessors.TryGetValue(typeof(T), out func))
             throw new ArgumentException($"Invalid SymbolTableRecord type: {typeof(T).Name}");
@@ -275,53 +289,13 @@ namespace Autodesk.AutoCAD.DatabaseServices.Linq
       }
 
       /// <summary>
-      /// Returns a sequence of DBObjects of type T, that are
-      /// owned by the DBObject whose ObjectId this method is
-      /// invoked on. 
-      /// 
-      /// The DBObject which this method is invoked on must 
-      /// be an IEnumerable that enumerates ObjectIds (e.g., 
-      /// SymbolTable, BlockTableRecord, etc.).
-      /// 
-      /// External use of this method is not recommended.
-      /// 
-      /// </summary>
-      /// <typeparam name="T">The type of elements to enumerate</typeparam>
-      /// <param name="ownerId">The ObjectId of a DBObject that
-      /// enumerates ObjectIds</param>
-      /// 
-      /// See the GetObjects<TBase, T>() method for a desription of 
-      /// all other parameters.
-
-      //static IEnumerable<T> GetObjects<T>(ObjectId ownerId,
-      //   Transaction tr,
-      //   OpenMode mode = OpenMode.ForRead,
-      //   bool exact = false,
-      //   bool openLocked = false) where T : DBObject
-      //{
-      //   if(tr == null)
-      //      throw new ArgumentNullException(nameof(tr));
-      //   if(ownerId.IsNull)
-      //      throw new ArgumentNullException(nameof(ownerId));
-      //   DBObject owner = tr.GetObject(ownerId, OpenMode.ForRead, false, false);
-      //   if(!(owner is IEnumerable enumerable))
-      //      throw new ArgumentException($"Owner not enumerable: {owner.GetType().Name}");
-      //   var first = enumerable.First();
-      //   if(first == null)
-      //      return Enumerable.Empty<T>();
-      //   if(!(first is ObjectId id))
-      //      throw new ArgumentException($"Invalid element type: {first?.GetType().Name ?? "(null)"}");
-      //   return GetObjects<DBObject, T>(enumerable, tr, mode, exact, false, openLocked);
-      //}
-
-      /// <summary>
       /// Upgrades the OpenMode of a sequence of DBObjects to
       /// OpenMode.ForWrite. If a Transaction is provided, the
       /// objects are upgraded using the Transaction, otherwise
       /// the objects are upgraded using UpgradeOpen(). When a
-      /// transaction is provided, the objects are upgraded for
-      /// write even if they are entities that reside on locked
-      /// layers.
+      /// transaction is provided, the objects are upgraded to
+      /// OpenMode.ForWrite <em>even if they are entities that 
+      /// reside on locked layers</em>.
       /// </summary>
       /// <typeparam name="T">The type of the elements in the
       /// output and resulting sequences</typeparam>
@@ -359,38 +333,42 @@ namespace Autodesk.AutoCAD.DatabaseServices.Linq
       /// is done to verify that the ObjectId is compatible).
       /// </summary>
       /// <typeparam name="T"></typeparam>
-      /// <param name="tr"></param>
+      /// <param name="trans"></param>
       /// <param name="id"></param>
       /// <param name="mode"></param>
       /// <returns></returns>
       /// <exception cref="ArgumentNullException"></exception>
 
       public static T GetObject<T>(this ObjectId id,
-            Transaction tr,
+            Transaction trans,
             OpenMode mode = OpenMode.ForRead,
             bool openOnLockedLayer = false) where T : DBObject
       {
-         if(tr == null)
-            throw new ArgumentNullException(nameof(tr));
+         if(trans == null)
+            throw new ArgumentNullException(nameof(trans));
          if(id.IsNull)
             throw new ArgumentNullException(nameof(id));
-         return (T)tr.GetObject(id, mode, false, openOnLockedLayer);
+         return (T)trans.GetObject(id, mode, false, openOnLockedLayer);
       }
 
-      public static T GetObject<T>(this Transaction tr,
+      /// <summary>
+      /// A version that targets Transactions:
+      /// </summary>
+
+      public static T GetObject<T>(this Transaction trans,
             ObjectId id,
             OpenMode mode = OpenMode.ForRead,
             bool openOnLockedLayer = false) where T : DBObject
       {
-         if(tr == null)
-            throw new ArgumentNullException(nameof(tr));
+         if(trans == null)
+            throw new ArgumentNullException(nameof(trans));
          if(id.IsNull) 
             throw new ArgumentNullException(nameof(id));
-         return (T)tr.GetObject(id, mode, false, openOnLockedLayer);
+         return (T)trans.GetObject(id, mode, false, openOnLockedLayer);
       }
 
-      /// What follows are high-level convenience methods built on 
-      /// top of the above APIs.
+      /// What follows are high-level convenience methods 
+      /// that are built on top of the above APIs.
 
       /// <summary>
       /// Returns a sequence of entities from the given database's
@@ -405,16 +383,51 @@ namespace Autodesk.AutoCAD.DatabaseServices.Linq
       /// <exception cref="ArgumentNullException"></exception>
 
       public static IEnumerable<T> GetModelSpaceObjects<T>(this Database db,
-         Transaction tr,
+         Transaction trans,
          OpenMode mode = OpenMode.ForRead,
          bool exact = false,
          bool openLocked = false) where T : Entity
       {
+         CheckTransaction(db, trans);
+         return SymbolUtilityServices.GetBlockModelSpaceId(db)
+            .GetObject<BlockTableRecord>(trans)
+            .GetObjects<T>(trans, mode, exact, openLocked);
+      }
+
+      /// <summary>
+      /// A common error is using the wrong Transaction manager
+      /// to obtain a transaction for a Database that's not open
+      /// in the editor. This attempts to check that.
+      /// The check cannot be fully-performed without a depenence
+      /// on AcMgd/AcCoreMgd.dll.
+      /// </summary>
+      /// <param name="db"></param>
+      /// <param name="trans"></param>
+      /// <exception cref="ArgumentNullException"></exception>
+      /// <exception cref="ArgumentException"></exception>
+
+      static void CheckTransaction(this Database db, Transaction trans)
+      {
+         if(trans == null)
+            throw new ArgumentNullException(nameof(trans));
          if(db == null)
             throw new ArgumentNullException(nameof(db));
-         return SymbolUtilityServices.GetBlockModelSpaceId(db)
-            .GetObject<BlockTableRecord>(tr)
-            .GetObjects<T>(tr, mode, exact, openLocked);
+         if(trans is OpenCloseTransaction)
+            return;
+         if(trans.GetType() != typeof(Transaction))
+            return; // can't perform check without pulling in AcMgd/AcCoreMgd
+         if(trans.TransactionManager != db.TransactionManager)
+            throw new ArgumentException("Transaction not from this Database");
+      }
+
+      static void CheckTransaction(object source, Transaction trans)
+      {
+         if(trans == null)
+            throw new ArgumentNullException(nameof(trans));
+         if(source == null)
+            throw new ArgumentNullException(nameof(source));
+         if(source is DBObject dbObject && dbObject.Database != null)
+            CheckTransaction(dbObject.Database, trans);
       }
 
       /// <summary>
