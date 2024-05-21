@@ -12,9 +12,12 @@
 /// access/querying of the contents of AutoCAD drawings 
 /// using LINQ
 
-using Autodesk.AutoCAD.GraphicsInterface;
-using Autodesk.AutoCAD.Runtime;
+using System;
 using System.Collections;
+using System.Collections.Generic;
+using System.Linq;
+using Autodesk.AutoCAD.Internal;
+using Autodesk.AutoCAD.Runtime;
 
 namespace Autodesk.AutoCAD.DatabaseServices.Linq
 {
@@ -66,27 +69,29 @@ namespace Autodesk.AutoCAD.DatabaseServices.Linq
       /// 
       /// The returned predicate uses a generic type that stores
       /// the runtime class associated with the generic argument
-      /// type that allows it to avoid capturing a local variable.
+      /// type, that allows it to avoid a costly local variable 
+      /// capture.
       /// 
       /// In the method, 'RXClass<T>.Value' is merely a reference
       /// to a static field of a static type.
       /// </summary>
       /// <typeparam name="T">The type of DBObject to match</typeparam>
       /// <param name="exactMatch">A value indicating if the
-      /// DBObject represented by an ObjectId must be equal to
-      /// the type of the generic argument, or be a type that
-      /// is derived from same. If the generic argument type is
-      /// abstract, this argument is ignored and is effectively-
-      /// false</param>
+      /// type of the DBObject represented by an ObjectId must 
+      /// be equal to the type of the generic argument, or be a 
+      /// type that is derived from same. 
+      /// 
+      /// If the generic argument type is abstract, this argument 
+      /// is ignored and is effectively-false</param>
       /// <returns>A value indicating if the ObjectId matches</returns>
 
       public static Func<ObjectId, bool> GetObjectIdPredicate<T>(
          bool exactMatch = false) where T : DBObject
       {
          if(exactMatch && !typeof(T).IsAbstract)
-            return static id => id.ObjectClass == RXClass<T>.Value; 
+            return id => id.ObjectClass == RXClass<T>.Value; 
          else
-            return static id => id.ObjectClass.IsDerivedFrom(RXClass<T>.Value);
+            return id => id.ObjectClass.IsDerivedFrom(RXClass<T>.Value);
       }
 
       /// <summary>
@@ -101,7 +106,8 @@ namespace Autodesk.AutoCAD.DatabaseServices.Linq
       }
 
       /// <summary>
-      /// A version of GetObjects() that targets BlockTableRecords
+      /// A version of GetObjects() that targets BlockTableRecords,
+      /// and enumerates block entities.
       /// </summary>
       /// <param name="blockTableRecord">The BlockTableRecord from
       /// which to retrieve the entities from.</param>
@@ -121,7 +127,9 @@ namespace Autodesk.AutoCAD.DatabaseServices.Linq
       }
 
       /// <summary>
-      /// A version of GetObjects() that targets ObjectIdCollection
+      /// A version of GetObjects() that targets ObjectIdCollection,
+      /// that enumerates the DBObjects represented by the ObjectIds
+      /// in the collection.
       /// </summary>
       /// <param name="ids">The ObjectIdCollection containing the
       /// ObjectIds of the objects to be opened and returned</param>
@@ -143,6 +151,8 @@ namespace Autodesk.AutoCAD.DatabaseServices.Linq
 
       /// <summary>
       /// A version of GetObjects() that targets IEnumerable<ObjectId>
+      /// that enumerates the DBObjects represented by the ObjectIds
+      /// in the sequence.
       /// </summary>
       /// <parm name="ids">The sequence of ObjectIds that are to 
       /// be opened and returned</parm>
@@ -162,7 +172,8 @@ namespace Autodesk.AutoCAD.DatabaseServices.Linq
       }
 
       /// <summary>
-      /// An overload of GetObjects() that targets SymbolTables
+      /// An overload of GetObjects() that targets SymbolTables,
+      /// that enumerates the table's SymbolTableRecords.
       /// </summary>
       /// <param name="table">The SymbolTable whose contents are
       /// to be opened and enumerated</param>
@@ -228,7 +239,7 @@ namespace Autodesk.AutoCAD.DatabaseServices.Linq
 
       /// <summary>
       /// Upgrades the OpenMode of a sequence of DBObjects to
-      /// OpenMode.ForWrite. If a Transaction is provided the
+      /// OpenMode.ForWrite. If a Transaction is provided, the
       /// objects are upgraded using the Transaction, otherwise
       /// the objects are upgraded using UpgradeOpen(). When a
       /// transaction is provided, the objects are upgraded for
@@ -259,19 +270,6 @@ namespace Autodesk.AutoCAD.DatabaseServices.Linq
                   obj.UpgradeOpen();
             }
             yield return obj;
-         }
-      }
-
-      static bool IsObjectIdIterator(IEnumerable enumerable)
-      {
-         IEnumerator e = enumerable.GetEnumerator();
-         try
-         {
-            return enumerable.GetEnumerator().GetType().Name == "ObjectIterator";
-         }
-         finally
-         {
-            (e as IDisposable)?.Dispose();
          }
       }
 
@@ -314,7 +312,7 @@ namespace Autodesk.AutoCAD.DatabaseServices.Linq
          return (T)tr.GetObject(id, mode, false, openOnLockedLayer);
       }
 
-      /// Higher-level convenience methods built on 
+      /// What follows are high-level convenience methods built on 
       /// top of the above APIs.
 
       /// <summary>
@@ -356,22 +354,64 @@ namespace Autodesk.AutoCAD.DatabaseServices.Linq
          return GetModelSpaceObjects<Entity>(db, tr, mode, exact, openLocked);
       }
 
+      /// <summary>
+      /// Returns a sequence of entities from the given database's
+      /// current space (which could be either model space, a paper
+      /// space layout, or any block if the block editor is active). 
+      /// 
+      /// The type of the generic argument is used to filter the types 
+      /// of entities that are produced.
+      /// </summary>
+      /// <typeparam name="T">The type of entity to return</typeparam>
+      /// <param name="db">The target Database</param>
+      /// 
+      /// See the GetObjectsCore<T>() method for a desription of 
+      /// all other parameters.
+      /// <exception cref="ArgumentNullException"></exception>
+
+      public static IEnumerable<T> GetCurrentSpaceObjects<T>(this Database db,
+         Transaction tr,
+         OpenMode mode = OpenMode.ForRead,
+         bool exact = false,
+         bool openLocked = false) where T : Entity
+      {
+         if(db == null)
+            throw new ArgumentNullException(nameof(db));
+         return db.CurrentSpaceId
+            .GetObject<BlockTableRecord>(tr)
+            .GetObjects<T>(tr, mode, exact, openLocked);
+      }
 
       /// <summary>
-      /// Returns a sequence containing entities from all paper
-      /// space layout blocks, excluding the model tab.
+      /// Non-generic version of GetCurrentSpaceObjects() that
+      /// enumerates all objects in the current space.
       /// </summary>
-      /// <typeparam name="T"></typeparam>
+
+      public static IEnumerable<Entity> GetCurrentSpaceObjects(this Database db,
+         Transaction tr,
+         OpenMode mode = OpenMode.ForRead,
+         bool exact = false,
+         bool openLocked = false)
+      {
+         return GetCurrentSpaceObjects<Entity>(db, tr, mode, exact, openLocked);
+      }
+
+
+      /// <summary>
+      /// Returns a sequence containing entities from ALL paper
+      /// space layout blocks.
+      /// </summary>
+      /// <typeparam name="T">The type of objects to enumerate</typeparam>
       /// <param name="db">The Database to obtain the objects from</param>
       /// 
       /// See the GetObjectsCore<T>() method for a desription of 
       /// all other parameters.
 
       public static IEnumerable<T> GetPaperSpaceObjects<T>(this Database db,
-      Transaction tr,
-      OpenMode mode = OpenMode.ForRead,
-      bool exact = false,
-      bool openLocked = false) where T : Entity
+         Transaction tr,
+         OpenMode mode = OpenMode.ForRead,
+         bool exact = false,
+         bool openLocked = false) where T : Entity
       {
          if(db == null)
             throw new ArgumentNullException(nameof(db));
@@ -389,7 +429,11 @@ namespace Autodesk.AutoCAD.DatabaseServices.Linq
       /// including dynamic block references.
       /// </summary>
 
-      public static IEnumerable<BlockReference> GetBlockReferences(this BlockTableRecord btr, Transaction tr, OpenMode mode = OpenMode.ForRead, bool directOnly = true)
+      public static IEnumerable<BlockReference> GetBlockReferences(
+         this BlockTableRecord btr, 
+         Transaction tr, 
+         OpenMode mode = OpenMode.ForRead, 
+         bool directOnly = true)
       {
          if(btr == null)
             throw new ArgumentNullException(nameof(btr));
@@ -419,8 +463,45 @@ namespace Autodesk.AutoCAD.DatabaseServices.Linq
       }
 
       /// <summary>
-      /// Get all AttributeReferences with the given tag, from
-      /// every insertion of the given block.
+      /// Returns a sequence containing all BlockReferences in
+      /// the Database, whose names match the given pattern.
+      /// 
+      /// Anonymous dynamic block references are included if the
+      /// dynamic block definition's name matches the pattern.
+      /// </summary>
+      /// <param name="db">The Database</param>
+      /// <param name="pattern">A wcmatch-style pattern that
+      /// matches the name of one or more blocks</param>
+      /// <param name="tr">The transaction to use in the
+      /// operation.</param>
+      /// <param name="mode">The OpenMode to open the 
+      /// BlockReferences in</param>
+      /// <returns>A sequence containing all matching
+      /// BlockReference objects.</returns>
+      /// <exception cref="ArgumentNullException"></exception>
+
+      public static IEnumerable<BlockReference> GetBlockReferences(
+         this Database db, 
+         string pattern,
+         Transaction tr,
+         OpenMode mode = OpenMode.ForRead)
+      {
+         if(db == null || db.IsDisposed)
+            throw new ArgumentNullException(nameof(db));
+         if(tr == null || tr.IsDisposed)
+            throw new ArgumentNullException(nameof(tr));
+         if(string.IsNullOrWhiteSpace(pattern))
+            throw new ArgumentNullException(nameof(pattern));
+
+         return db.BlockTableId.GetObject<BlockTable>(tr)
+            .GetObjects<BlockTableRecord>(tr)
+            .Where(btr => btr.IsUserBlock() && btr.Name.Matches(pattern))
+            .SelectMany(btr => btr.GetBlockReferences(tr, mode, true));
+      }
+
+      /// <summary>
+      /// Get all AttributeReferences with the given tag from
+      /// every insertion of the given BlockTableRecord.
       /// </summary>
 
       public static IEnumerable<AttributeReference> GetAttributeReferences(
@@ -443,7 +524,7 @@ namespace Autodesk.AutoCAD.DatabaseServices.Linq
 
       /// <summary>
       /// Get AttributeReferences from the given block reference (lazy).
-      /// Can enumerate AttributeReferences of database-resident and
+      /// Can enumerate AttributeReferences of database resident and
       /// non-database resident BlockReferences.
       /// </summary>
 
@@ -498,6 +579,16 @@ namespace Autodesk.AutoCAD.DatabaseServices.Linq
       }
 
       // Helper methods
+
+      static bool IsUserBlock(this BlockTableRecord btr)
+      {
+         return !(btr.IsAnonymous || btr.IsLayout || btr.IsFromExternalReference || btr.IsDependent);
+      }
+
+      static bool Matches(this string str, string pattern, bool ignoreCase = true)
+      {
+         return Utils.WcMatchEx(str, pattern, ignoreCase);
+      }
 
       public static object First(this IEnumerable enumerable)
       {
