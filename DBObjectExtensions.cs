@@ -75,7 +75,7 @@ namespace Autodesk.AutoCAD.DatabaseServices.Linq
             throw new ArgumentNullException(nameof(source));
          if(trans == null)
             throw new ArgumentNullException(nameof(trans));
-         if(source is DBObject dbObj)
+         if(source is DBObject dbObj && dbObj.Database != null)
             CheckTransaction(dbObj.Database, trans);
          if(typeof(T) != typeof(TBase))
          {
@@ -186,10 +186,9 @@ namespace Autodesk.AutoCAD.DatabaseServices.Linq
       public static IEnumerable<Entity> GetEntities(this ObjectIdCollection source,
          Transaction trans,
          OpenMode mode = OpenMode.ForRead,
-         bool exact = false,
          bool openLocked = false)
       {
-         return GetObjects<Entity, Entity>(source, trans, mode, exact, false, openLocked);
+         return GetObjects<Entity, Entity>(source, trans, mode, false, false, openLocked);
       }
 
       /// <summary>
@@ -201,6 +200,12 @@ namespace Autodesk.AutoCAD.DatabaseServices.Linq
       /// be assumed that all elements in the source sequence 
       /// represent an Entity or a type derived from same, and
       /// the requested type of the resulting sequence is Entity.
+      /// Using GetEntities() in that case allows the underlying
+      /// worker method to take an optimized path.
+      /// 
+      /// Alternately, one can use this overload and specify
+      /// Entity for <em>both</em> generic arguments, to achieve 
+      /// the same result.
       /// </summary>
       /// <parm name="ids">The sequence of ObjectIds representing
       /// the entities that are to be opened and returned</parm>
@@ -220,10 +225,9 @@ namespace Autodesk.AutoCAD.DatabaseServices.Linq
       public static IEnumerable<Entity> GetEntities(this IEnumerable<ObjectId> source,
             Transaction trans,
             OpenMode mode = OpenMode.ForRead,
-            bool exact = false,
             bool openLocked = false) 
       {
-         return GetObjects<Entity, Entity>(source, trans, mode, exact, false, openLocked);
+         return GetObjects<Entity, Entity>(source, trans, mode, false, false, openLocked);
       }
 
       /// <summary>
