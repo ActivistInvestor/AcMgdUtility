@@ -12,6 +12,7 @@
 /// access/querying of the contents of AutoCAD drawings 
 /// using LINQ
 
+using Autodesk.AutoCAD.GraphicsInterface;
 using Autodesk.AutoCAD.Runtime;
 using System.Collections;
 
@@ -190,19 +191,21 @@ namespace Autodesk.AutoCAD.DatabaseServices.Linq
       /// owned by the DBObject whose ObjectId this method is
       /// invoked on. 
       /// 
-      /// The DBObject must implement an IEnumerable interface
-      /// that enumerates ObjectIds (e.g., such as SymbolTable, 
-      /// BlockTableRecord, etc.).
+      /// The DBObject which this method is invoked on must 
+      /// be an IEnumerable that enumerates ObjectIds (e.g., 
+      /// SymbolTable, BlockTableRecord, etc.).
+      /// 
+      /// External use of this method is not recommended.
       /// 
       /// </summary>
-      /// <typeparam name="T"></typeparam>
+      /// <typeparam name="T">The type of elements to enumerate</typeparam>
       /// <param name="ownerId">The ObjectId of a DBObject that
       /// enumerates ObjectIds</param>
       /// 
       /// See the GetObjectsCore<T>() method for a desription of 
       /// all other parameters.
 
-      public static IEnumerable<T> GetObjects<T>(this ObjectId ownerId,
+      static IEnumerable<T> GetObjects<T>(ObjectId ownerId,
          Transaction tr,
          OpenMode mode = OpenMode.ForRead,
          bool exact = false,
@@ -214,13 +217,12 @@ namespace Autodesk.AutoCAD.DatabaseServices.Linq
             throw new ArgumentNullException(nameof(ownerId));
          DBObject owner = tr.GetObject(ownerId, OpenMode.ForRead, false, false);
          if(!(owner is IEnumerable enumerable))
-            throw new ArgumentException($"Invalid owner: {owner.GetType().Name}");
-         var objects = enumerable.Cast<object>();
-         if(!objects.Any())
+            throw new ArgumentException($"Owner not enumerable: {owner.GetType().Name}");
+         var first = enumerable.First();
+         if(first == null)
             return Enumerable.Empty<T>();
-         object first = objects.First();
-         if(!(first is ObjectId))
-            throw new ArgumentException($"Invalid element type: {first.GetType().Name}");
+         if(!(first is ObjectId id))
+            throw new ArgumentException($"Invalid element type: {first?.GetType().Name ?? "(null)"}");
          return GetObjectsCore<T>(enumerable, tr, mode, exact, false, openLocked);
       }
 
@@ -440,7 +442,9 @@ namespace Autodesk.AutoCAD.DatabaseServices.Linq
       }
 
       /// <summary>
-      /// Get AttributeReferences from the given block reference (lazy)
+      /// Get AttributeReferences from the given block reference (lazy).
+      /// Can enumerate AttributeReferences of database-resident and
+      /// non-database resident BlockReferences.
       /// </summary>
 
       public static IEnumerable<AttributeReference> GetAttributes(this BlockReference blkref, Transaction tr, OpenMode mode = OpenMode.ForRead)
@@ -449,8 +453,21 @@ namespace Autodesk.AutoCAD.DatabaseServices.Linq
             throw new ArgumentNullException(nameof(blkref));
          if(tr == null)
             throw new ArgumentNullException(nameof(tr));
-         foreach(ObjectId id in blkref.AttributeCollection)
-            yield return (AttributeReference)tr.GetObject(id, mode, false, false);
+         var objects = blkref.AttributeCollection.Cast<object>();
+         object first = blkref.AttributeCollection.First();
+         if(first != null)
+         {
+            if(first is AttributeReference)
+            {
+               foreach(AttributeReference attref in blkref.AttributeCollection)
+                  yield return attref;
+            }
+            else
+            {
+               foreach(ObjectId id in blkref.AttributeCollection)
+                  yield return (AttributeReference)tr.GetObject(id, mode, false, false);
+            }
+         }
       }
 
       /// <summary>
@@ -470,6 +487,34 @@ namespace Autodesk.AutoCAD.DatabaseServices.Linq
       {
          return blkref.GetAttributes(tr, mode)
             .ToDictionary(att => att.Tag.ToUpper(), att => att);
+      }
+
+      public static Dictionary<string, string> GetAttributeValues(
+         this BlockReference blkref,
+         Transaction tr)
+      {
+         return blkref.GetAttributes(tr)
+            .ToDictionary(att => att.Tag.ToUpper(), att => att.TextString);
+      }
+
+      // Helper methods
+
+      public static object First(this IEnumerable enumerable)
+      {
+         if(enumerable == null)
+            throw new ArgumentNullException(nameof(enumerable));
+         var e = enumerable.GetEnumerator();
+         try
+         {
+            if(e.MoveNext())
+               return e.Current;
+            else
+               return null;
+         }
+         finally
+         {
+            (e as IDisposable)?.Dispose();
+         }
       }
 
    }
