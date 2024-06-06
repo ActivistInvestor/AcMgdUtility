@@ -11,9 +11,12 @@
 ///
 
 using System;
-using System.Diagnostics;
+using System.Collections.Concurrent;
+using System.Runtime.CompilerServices;
 using Autodesk.AutoCAD.Ribbon;
 using Autodesk.Windows;
+using Autodesk.AutoCAD.Runtime;
+using AcRx = Autodesk.AutoCAD.Runtime;
 
 namespace Autodesk.AutoCAD.ApplicationServices.AIUtils
 {
@@ -22,9 +25,9 @@ namespace Autodesk.AutoCAD.ApplicationServices.AIUtils
    /// RibbonExtensionApplication class without requiring 
    /// an IExtensionApplication to be defined. 
    /// 
-   /// Instead, it exposes a single event can be handled 
-   /// to be notified whenever it is necessary to add or
-   /// refresh ribbon content.
+   /// Instead, it exposes a single event that can be 
+   /// handled to be notified whenever it is necessary 
+   /// to add or refresh ribbon content.
    /// 
    /// The InitializeRibbon event:
    /// 
@@ -32,9 +35,9 @@ namespace Autodesk.AutoCAD.ApplicationServices.AIUtils
    /// simply add a handler to it when the application/extension
    /// is loaded (e.g., from an IExtensionApplication.Initialize
    /// method). If that is done, it isn't necessary to check to
-   /// see if the ribbon exists, or do anything else related to
-   /// the ribbbon, since the RibbonEventManager does all of that 
-   /// for the applications using it.
+   /// see if the ribbon exists. One most only add a handler to
+   /// the RibbonEventManager's InitializeRibbon event, and in
+   /// the handler, add content to the ribbon.
    /// 
    /// Using this class and its single event relieves the developer
    /// from the complicated burden of having to check conditions and
@@ -55,7 +58,7 @@ namespace Autodesk.AutoCAD.ApplicationServices.AIUtils
    ///      
    ///      private void LoadRibbonContent(object sender, RibbonStateEventArgs e)
    ///      {
-   ///         // Here, you can safely assume
+   ///         // Here, one can safely assume
    ///         // that the ribbon exists.
    ///         
    ///         // TODO: Add content to ribbon.
@@ -69,8 +72,8 @@ namespace Autodesk.AutoCAD.ApplicationServices.AIUtils
    /// </code>
    /// 
    /// The handler for the InitializeRibbon event will be 
-   /// called whenever it is necessary to add content to 
-   /// the ribbon, which includes:
+   /// called whenever it may be necessary to add content 
+   /// to the ribbon, which includes:
    ///   
    ///   1. At startup if the ribbon exists.
    ///   
@@ -78,10 +81,104 @@ namespace Autodesk.AutoCAD.ApplicationServices.AIUtils
    ///      shown (if it did not exist at startup).
    ///      
    ///   3. When a workspace is loaded.
-   /// 
+   ///   
    /// The State property of the event argument indicates
    /// which of the these three conditions triggered the
    /// event.
+   /// 
+   /// 6/4/24 Revisons:
+   /// 
+   /// 1. The IdleAction class has been replaced with the
+   ///    IdleAwaiter class, to defer execution of code 
+   ///    until the next Application.Idle event is raised.
+   /// 
+   /// 2. Reports were received that suggest that when the
+   ///    WorkspaceLoaded event (which is one of the events 
+   ///    that drives the InitializeRibbon event) is raised,
+   ///    previously-added ribbon content may not need to be 
+   ///    added again in all cases. 
+   ///    
+   ///    While the conditions under which that happens is 
+   ///    not entirely clear, it nontheless requires that a
+   ///    check be performed from the InitializeRibbon event
+   ///    handler to determine if any previously-added ribbon 
+   ///    content is already present on the ribbon and if so,
+   ///    avoid adding it again.
+   ///    
+   ///    To simplify that task, methods were added to the
+   ///    RibbonStateEventArgs class, that will conditionally
+   ///    add RibbonTabs to the ribbon only if they are not
+   ///    already present.
+   ///    
+   ///    See the following discussion regarding this issue
+   ///    and dealing with it using the AddRibbonTabs() method.
+   ///    
+   /// RibbonStateEventArgs.AddRibbonTabs() method.
+   /// 
+   /// The WorkspaceLoaded event that drives the InitializeRibbon
+   /// event can fire even when the ribbon is not altered, which
+   /// means that previously-added ribbon content may already be
+   /// present on the ribbon and doesn't need to be added again.
+   /// 
+   /// When the State property of the InitializeRibbon event 
+   /// arguments is RibbonState.WorkspaceLoaded, it is possible 
+   /// that appllication-provided content may already be present 
+   /// on the ribbon, so applications must check to see if that 
+   /// is the case before adding it.
+   /// 
+   /// The RibbonStateEventArgs class which is passed into the
+   /// InitializeRibbon event handler has a new method that will
+   /// conditionally add one or more tabs to the ribbon if they 
+   /// are not already present on it. This method can be used to 
+   /// avoid the need to manually test for the presence of ribbon 
+   /// tabs before adding them.
+   /// 
+   /// This example handler for the InitializeRibbon event 
+   /// shows how the AddRibbonTabs() method can be used to add 
+   /// a one or more ribbon tabs to the ribbon if they are not 
+   /// already present on same:
+   /// 
+   ///   Create two ribbon tabs and assign 
+   ///   them to static members:
+   ///   
+   /// <code>
+   /// 
+   ///   static RibbonTab myRibbonTab1 = new RibbonTab {....} 
+   ///   static RibbonTab myRibbonTab2 = new RibbonTab {....}
+   ///   
+   /// </code>
+   /// 
+   ///   A handler for the RibbonEventManager.InitializeRibbon event:
+   /// 
+   /// <code>
+   /// 
+   ///   void initializeRibbon(object sender, RibbonStateEventArgs e)
+   ///   {
+   ///      e.AddRibbonTabs(myRibbonTab1, myRibbonTab2);
+   ///   }
+   ///   
+   /// </code>
+   /// 
+   ///   Without using the AddRibbonTabs() method, a handler 
+   ///   must manually check for the presence of tabs and only
+   ///   add them if they are not already on the ribbon, like so:
+   ///   
+   /// <code>
+   /// 
+   ///   void initializeRibbon(object sender, RibbonStateEventArgs e)
+   ///   {
+   ///      var tabs = e.RibbonControl.Tabs;
+   ///      if(!tabs.Contains(myRibbonTab1))
+   ///      {
+   ///         tabs.Add(myRibbonTab1);
+   ///      }
+   ///      if(!tabs.Contains(myRibbonTab2))
+   ///      {
+   ///         tabs.Add(myRibbonTab2);
+   ///      }
+   ///   }
+   ///   
+   /// </code>
    /// 
    /// </summary>
 
@@ -90,7 +187,7 @@ namespace Autodesk.AutoCAD.ApplicationServices.AIUtils
 
       static DocumentCollection docs = Application.DocumentManager;
       static bool initialized = false;
-      static event RibbonStateEventHandler initializeRibbon;
+      static event RibbonStateEventHandler? initializeRibbon = null;
 
       static RibbonEventManager()
       {
@@ -109,30 +206,29 @@ namespace Autodesk.AutoCAD.ApplicationServices.AIUtils
          });
       }
 
-      static void RaiseInitializeRibbonEvent(RibbonState state, Action continuation = null)
+      static async void RaiseInitializeRibbonEvent(RibbonState state, Action continuation = null)
       {
-         IdleAction.OnIdle(() =>
-         {
-            initializeRibbon?.Invoke(RibbonPaletteSet, new RibbonStateEventArgs(state));
-            continuation?.Invoke();
-         });
+         await WaitForIdle();
+         initializeRibbon?.Invoke(RibbonPaletteSet, new RibbonStateEventArgs(state));
+         continuation?.Invoke();
       }
 
-      private static void ribbonPaletteSetCreated(object sender, EventArgs e)
+      private static void ribbonPaletteSetCreated(object? sender, EventArgs e)
       {
          RibbonServices.RibbonPaletteSetCreated -= ribbonPaletteSetCreated;
          Initialize(RibbonState.Initalizing);
       }
 
-      private static void workspaceLoaded(object sender, EventArgs e)
+      private static void workspaceLoaded(object? sender, EventArgs e)
       {
          if(initializeRibbon != null)
             RaiseInitializeRibbonEvent(RibbonState.WorkspaceLoaded);
       }
 
       /// <summary>
-      /// If a handler is added to this event and the ribbon exists,
-      /// the handler will be invoked on the next Idle event.
+      /// If a handler is added to this event and the ribbon 
+      /// exists, the handler will be invoked on the next Idle 
+      /// event.
       /// 
       /// Note: Adding the same event handler to this event
       /// multiple times will result in undefined behavior.
@@ -144,19 +240,10 @@ namespace Autodesk.AutoCAD.ApplicationServices.AIUtils
          {
             if(value == null)
                throw new ArgumentNullException(nameof(value));
-
             if(initialized)
-            {
-               IdleAction.OnIdle(() =>
-               {
-                  value(RibbonPaletteSet, new RibbonStateEventArgs(RibbonState.Active));
-                  initializeRibbon += value;
-               });
-            }
+               InvokeHandler(value);
             else
-            {
                initializeRibbon += value;
-            }
          }
          remove
          {
@@ -164,17 +251,21 @@ namespace Autodesk.AutoCAD.ApplicationServices.AIUtils
          }
       }
 
-      static Document Document =>
-         Application.DocumentManager.MdiActiveDocument;
+      static async void InvokeHandler(RibbonStateEventHandler handler)
+      {
+         await WaitForIdle();
+         handler(RibbonPaletteSet, new RibbonStateEventArgs(RibbonState.Active));
+         initializeRibbon += handler;
+      }
 
       static RibbonPaletteSet RibbonPaletteSet =>
          RibbonServices.RibbonPaletteSet;
 
-      static RibbonControl RibbonControl =>
+      static RibbonControl? RibbonControl =>
          RibbonPaletteSet?.RibbonControl;
 
-      /// Helper classes excerpted from the
-      /// DocumentCollectionExtensions class
+      /// Helper classes and methods excerpted from 
+      /// DocumentCollectionExtensions.cs
       /// 
       /// <summary>
       /// Indicates if an action can execute based on
@@ -193,74 +284,54 @@ namespace Autodesk.AutoCAD.ApplicationServices.AIUtils
             : !quiescent || docs.MdiActiveDocument.Editor.IsQuiescent;
       }
 
-      /// <summary>
-      /// Conditionally executes an action on a subsequent 
-      /// raising of the Application.Idle event.
-      /// </summary>
-
-      class IdleAction
+      public static IdleAwaiter WaitForIdle()
       {
-         Action action;
-         bool document;
-         bool quiescent;
-         Document targetDocument;
+         return new IdleAwaiter();
+      }
+
+      public struct IdleAwaiter : INotifyCompletion
+      {
+         static ConcurrentQueue<Action> actions = new ConcurrentQueue<Action>();
+
+         static void idle(object sender, EventArgs e)
+         {
+            Action action = null;
+            bool flag = actions.Count > 0;
+            if(flag && actions.TryDequeue(out action) && action != null)
+            {
+               if(actions.Count == 0)
+                  Application.Idle -= idle;
+               AcRx.SynchronizationContext.Current.Post(Invoker, action);
+            }
+         }
+
+         static void Invoker(object action)
+         {
+            ((Action)action)?.Invoke();
+         }
 
          /// <summary>
-         /// If document is true, execution of the action
-         /// is deferred until there is an active document.
-         /// if quiescent is true, execution of the action
-         /// is deferred until there is an active document
-         /// and it is in a quiescent state. If quiescent
-         /// is true, document is effectively-true.
-         /// 
-         /// If the quiescent and document conditions are not 
-         /// satisified, invocation of the action is retried 
-         /// on the next raising of the idle event.
-         /// 
+         /// Executes the awaited continuation when the Idle event is raised.
          /// </summary>
-         /// <param name="action">The action to execute</param>
-         /// <param name="document">A value indicating if an 
-         /// active document is required to execute the action</param>
-         /// <param name="quiescent">A value indicating if a
-         /// quiescent active document is required to execute
-         /// the action</param>
+         /// <returns></returns>
 
-         IdleAction(Action action, bool quiescent = false, bool document = true)
+         public static IdleAwaiter WaitOne()
          {
-            if(action == null)
-               throw new ArgumentNullException(nameof(action));
-            this.action = action;
-            this.quiescent = quiescent;
-            this.document = document || quiescent;
-            this.targetDocument = docs.MdiActiveDocument;
-            Application.Idle += idle;
+            return new IdleAwaiter();
          }
 
-         void idle(object sender, EventArgs e)
-         {
-            if(action == null)
-            {
-               Application.Idle -= idle;
-            }
-            else if(document && docs.MdiActiveDocument != targetDocument)
-            {
-               if(targetDocument?.IsDisposed == true)
-               {
-                  Application.Idle -= idle;
-                  action = null;
-               }
-            }
-            else if(CanInvoke(quiescent, document))
-            {
-               Application.Idle -= idle;
-               action();
-               action = null;
-            }
-         }
+         public IdleAwaiter GetAwaiter() { return this; }
 
-         public static void OnIdle(Action action, bool quiescent = false, bool document = true)
+         public bool IsCompleted { get { return false; } }
+
+         public void GetResult() { }
+
+         public void OnCompleted(Action continuation)
          {
-            new IdleAction(action, quiescent, document);
+            bool flag = actions.Count == 0;
+            actions.Enqueue(continuation);
+            if(flag && actions.Count > 0)
+               Application.Idle += idle;
          }
       }
    }
@@ -286,8 +357,8 @@ namespace Autodesk.AutoCAD.ApplicationServices.AIUtils
       /// <summary>
       /// The ribbon exists and was previously
       /// initialized, and a workspace was just
-      /// loaded, requiring application-provided
-      /// ribbon content to be added again.
+      /// loaded, possibly requiring application-
+      /// provided ribbon content to be added again.
       /// </summary>
       WorkspaceLoaded = 2,
 
@@ -298,7 +369,7 @@ namespace Autodesk.AutoCAD.ApplicationServices.AIUtils
       RefreshContent = 3
    }
 
-   public delegate void RibbonStateEventHandler(object sender, RibbonStateEventArgs e);
+   public delegate void RibbonStateEventHandler(object? sender, RibbonStateEventArgs e);
 
    public class RibbonStateEventArgs : EventArgs
    {
@@ -306,11 +377,76 @@ namespace Autodesk.AutoCAD.ApplicationServices.AIUtils
       {
          this.State = state;
       }
+
+      /// <summary>
+      /// Conditionally adds one or more tabs to the Ribbon
+      /// if they are not already present on it.
+      /// </summary>
+      /// <param name="items">One or more RibbonTab instances</param>
+      /// <returns>The number of items added to the ribbon</returns>
+
+      public int AddRibbonTabs(params RibbonTab[] items)
+      {
+         return AddRibbonTabs((IEnumerable<RibbonTab>)items);
+      }
+
+      public int AddRibbonTabs(IEnumerable<RibbonTab> items)
+      {
+         if(RibbonControl == null)
+            return 0;
+         if(items == null)
+            throw new ArgumentNullException(nameof(items));
+         return RibbonControl.TryAddTabs(items.ToArray());
+      }
+
       public RibbonState State { get; private set; }
       public RibbonPaletteSet RibbonPaletteSet =>
          RibbonServices.RibbonPaletteSet;
       public RibbonControl RibbonControl =>
          RibbonPaletteSet?.RibbonControl;
+   }
+}
+
+namespace Autodesk.AutoCAD.Ribbon
+{ 
+   public static partial class RibbonControlExtensions
+   {
+      /// <summary>
+      /// An extension method targeting the RibbonControl, that 
+      /// conditionally adds one or more tabs to the ribbon if 
+      /// not already present.
+      /// </summary>
+      /// <param name="items">One or more RibbonTab instances</param>
+      /// <returns>The number of tabs added to the ribbon</returns>
+
+      public static int TryAddTabs(this RibbonControl ribbon, params RibbonTab[] items)
+      {
+         if(items == null)
+            throw new ArgumentNullException(nameof(items));
+         return TryAddTabs(ribbon, (IEnumerable<RibbonTab>)items);
+      }
+
+      public static int TryAddTabs(this RibbonControl ribbon, IEnumerable<RibbonTab> items)
+      {
+         if(ribbon == null)
+            throw new ArgumentNullException(nameof(ribbon));
+         if(items == null)
+            throw new ArgumentNullException(nameof(items));
+         int result = 0;
+         var tabs = ribbon.Tabs;
+         foreach(RibbonTab tab in items)
+         {
+            if(tab == null)
+               throw new ArgumentException("null element");
+            if(!tabs.Contains(tab))
+            {
+               result++;
+               tabs.Add(tab);
+            }
+         }
+         return result;
+      }
+
    }
 
 }
