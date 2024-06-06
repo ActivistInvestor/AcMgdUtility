@@ -92,7 +92,7 @@ namespace Autodesk.AutoCAD.ApplicationServices.AIUtils
    ///    IdleAwaiter class, to defer execution of code 
    ///    until the next Application.Idle event is raised.
    /// 
-   /// 2. Reports were received that suggest that when the
+   /// 2. Reports were received suggesting that when the
    ///    WorkspaceLoaded event (which is one of the events 
    ///    that drives the InitializeRibbon event) is raised,
    ///    previously-added ribbon content may not need to be 
