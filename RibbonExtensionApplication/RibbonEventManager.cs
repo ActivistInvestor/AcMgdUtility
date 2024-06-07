@@ -44,7 +44,7 @@ namespace Autodesk.AutoCAD.ApplicationServices.AIUtils
    /// simply add a handler to it when the application/extension
    /// is loaded (e.g., from an IExtensionApplication.Initialize
    /// method). If that is done, it isn't necessary to check to
-   /// see if the ribbon exists. One most only add a handler to
+   /// see if the ribbon exists. One must only add a handler to
    /// the RibbonEventManager's InitializeRibbon event, and in
    /// the handler, add content to the ribbon.
    /// 
