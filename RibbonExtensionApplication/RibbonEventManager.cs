@@ -135,7 +135,7 @@ namespace Autodesk.AutoCAD.ApplicationServices.AIUtils
    /// 
    /// This example handler for the InitializeRibbon event 
    /// shows how the AddRibbonTabs() method can be used to add 
-   /// one or more ribbon tabs to the ribbon, if they are not 
+   /// a one or more ribbon tabs to the ribbon if they are not 
    /// already present on same:
    /// 
    ///   Create two ribbon tabs and assign 
@@ -187,7 +187,7 @@ namespace Autodesk.AutoCAD.ApplicationServices.AIUtils
 
       static DocumentCollection docs = Application.DocumentManager;
       static bool initialized = false;
-      static event RibbonStateEventHandler? initializeRibbon = null;
+      static event RibbonStateEventHandler initializeRibbon = null;
 
       static RibbonEventManager()
       {
@@ -220,10 +220,10 @@ namespace Autodesk.AutoCAD.ApplicationServices.AIUtils
          Initialize(RibbonState.Initalizing);
       }
 
-      private static void workspaceLoaded(object? sender, EventArgs e)
+      private static async void workspaceLoaded(object? sender, EventArgs e)
       {
          if(initializeRibbon != null)
-            RaiseInitializeRibbon(RibbonState.WorkspaceLoaded);
+            await RaiseInitializeRibbon(RibbonState.WorkspaceLoaded);
       }
 
       /// <summary>
@@ -333,12 +333,13 @@ namespace Autodesk.AutoCAD.ApplicationServices.AIUtils
 
          public void OnCompleted(Action continuation)
          {
-            if(continuation == null)
-               throw new ArgumentNullException(nameof(continuation));
-            bool empty = actions.Count == 0;
-            actions.Enqueue(continuation);
-            if(empty && actions.Count > 0)
-               Application.Idle += idle;
+            if(continuation != null)
+            {
+               bool empty = actions.Count == 0;
+               actions.Enqueue(continuation);
+               if(empty && actions.Count > 0)
+                  Application.Idle += idle;
+            }
          }
 
          /// To avoid bogging down the UI, only one 
@@ -352,7 +353,10 @@ namespace Autodesk.AutoCAD.ApplicationServices.AIUtils
             {
                if(actions.Count == 0)
                   Application.Idle -= idle;
-               action.Invoke();
+               /// Not really necessary, because the Idle
+               /// event always runs on the main thread:
+               AcRx.SynchronizationContext.Current?.Post(
+                  (a) => ((Wrapper)a).Invoke(), action);
             }
          }
 
