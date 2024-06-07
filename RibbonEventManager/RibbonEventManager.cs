@@ -216,8 +216,7 @@ namespace Autodesk.AutoCAD.ApplicationServices.AIUtils
 
       private static async void workspaceLoaded(object sender, EventArgs e)
       {
-         if(initializeRibbon != null)
-            RaiseInitializeRibbon(RibbonState.WorkspaceLoaded);
+         await RaiseInitializeRibbon(RibbonState.WorkspaceLoaded);
       }
 
       /// <summary>
