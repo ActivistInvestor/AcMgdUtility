@@ -135,7 +135,7 @@ namespace Autodesk.AutoCAD.ApplicationServices.AIUtils
    /// 
    /// This example handler for the InitializeRibbon event 
    /// shows how the AddRibbonTabs() method can be used to add 
-   /// a one or more ribbon tabs to the ribbon if they are not 
+   /// one or more ribbon tabs to the ribbon, if they are not 
    /// already present on same:
    /// 
    ///   Create two ribbon tabs and assign 
