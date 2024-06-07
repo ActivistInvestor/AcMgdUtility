@@ -25,9 +25,18 @@ namespace Autodesk.AutoCAD.ApplicationServices.AIUtils
    /// RibbonExtensionApplication class without requiring 
    /// an IExtensionApplication to be defined. 
    /// 
-   /// Instead, it exposes a single event that can be 
-   /// handled to be notified whenever it is necessary 
-   /// to add or refresh ribbon content.
+   /// After several revisions and bug fixes were applied
+   /// to this class, its use is highly-preferred over the 
+   /// use of RibbonExtensionApplication, which has yet to 
+   /// be revised and updated to incorporate the bug fixes 
+   /// applied to RibbonEventManager. 
+   /// 
+   /// It is also simpler to use the RibbonEventManager in 
+   /// conjunction with existing IExtensionApplications.
+   /// 
+   /// RibbonEventManager exposes a single event that can be
+   /// handled to be notified whenever it may be necessary to 
+   /// add or refresh ribbon content.
    /// 
    /// The InitializeRibbon event:
    /// 
@@ -161,7 +170,7 @@ namespace Autodesk.AutoCAD.ApplicationServices.AIUtils
    /// 
    ///   Without using the AddRibbonTabs() method, a handler 
    ///   must manually check for the presence of tabs and only
-   ///   add them if they are not already on the ribbon, like so:
+   ///   add them if not already on the ribbon, like so:
    ///   
    /// <code>
    /// 
@@ -180,18 +189,39 @@ namespace Autodesk.AutoCAD.ApplicationServices.AIUtils
    ///   
    /// </code>
    /// 
+   /// Test scenarios covered:
+   /// 
+   /// 1. Client extension application loaded at startup:
+   /// 
+   ///    - With ribbon existing at startup.
+   ///    - With ribbon not existing at startup,
+   ///      and created at some later point.
+   ///       
+   /// 2. Client extension application loaded at any point
+   ///    during session via NETLOAD or via demand-loading
+   ///    when a command is issued:
+   ///    
+   ///    - With ribbon existing at load-time.
+   ///    - With ribbon not existing at load-time, 
+   ///      and created at some later point.
+   /// 
+   /// 3. With client extension loaded and ribbon content
+   ///    already present on ribbon:
+   ///    
+   ///    - CUI command
+   ///    - MENULOAD command.
+   /// 
    /// </summary>
 
    public static class RibbonEventManager
    {
 
-      static DocumentCollection docs = Application.DocumentManager;
+      static DocumentCollection documents = Application.DocumentManager;
       static bool initialized = false;
       static event RibbonStateEventHandler initializeRibbon = null;
 
       static RibbonEventManager()
       {
-         bool flag = RibbonControl != null;
          if(RibbonControl != null)
             Initialize(RibbonState.Active);
          else
@@ -214,13 +244,13 @@ namespace Autodesk.AutoCAD.ApplicationServices.AIUtils
          }
       }
 
-      private static void ribbonPaletteSetCreated(object? sender, EventArgs e)
+      private static void ribbonPaletteSetCreated(object sender, EventArgs e)
       {
          RibbonServices.RibbonPaletteSetCreated -= ribbonPaletteSetCreated;
          Initialize(RibbonState.Initalizing);
       }
 
-      private static async void workspaceLoaded(object? sender, EventArgs e)
+      private static async void workspaceLoaded(object sender, EventArgs e)
       {
          if(initializeRibbon != null)
             await RaiseInitializeRibbon(RibbonState.WorkspaceLoaded);
@@ -279,12 +309,6 @@ namespace Autodesk.AutoCAD.ApplicationServices.AIUtils
       /// the action</param>
       /// </summary>
 
-      public static bool CanInvoke(bool quiescent = false, bool document = true)
-      {
-         return docs.MdiActiveDocument == null ? !document
-            : !quiescent || docs.MdiActiveDocument.Editor.IsQuiescent;
-      }
-
       public static IdleAwaiter WaitForIdle()
       {
          return new IdleAwaiter();
@@ -309,7 +333,7 @@ namespace Autodesk.AutoCAD.ApplicationServices.AIUtils
       
       public static async Task WaitForApplicationContext()
       {
-         if(!Application.DocumentManager.IsApplicationContext)
+         if(!documents.IsApplicationContext)
             await WaitForIdle();
       }
 
@@ -321,9 +345,9 @@ namespace Autodesk.AutoCAD.ApplicationServices.AIUtils
       /// 
       /// Instead, to delay the execution of an arbitrary block
       /// of code until the next Idle event is raised, one only 
-      /// needs to call 'await WaitForIdle()'. Any code following 
-      /// that awaited call will not run until the Idle event has 
-      /// been raised.
+      /// needs to call 'await IdleAWaiter.WaitOne()'. Any code 
+      /// following that awaited call will not run until the Idle 
+      /// event has been raised.
       /// </summary>
       
       public struct IdleAwaiter : INotifyCompletion
@@ -335,9 +359,9 @@ namespace Autodesk.AutoCAD.ApplicationServices.AIUtils
          {
             if(continuation != null)
             {
-               bool empty = actions.Count == 0;
+               bool wasEmpty = actions.Count == 0;
                actions.Enqueue(continuation);
-               if(empty && actions.Count > 0)
+               if(wasEmpty && actions.Count > 0)
                   Application.Idle += idle;
             }
          }
@@ -361,7 +385,8 @@ namespace Autodesk.AutoCAD.ApplicationServices.AIUtils
          }
 
          /// <summary>
-         /// Executes the awaited continuation when the Idle event is raised.
+         /// Delays execution of code following an awaited call 
+         /// to this method until the next Idle event is raised.
          /// </summary>
          /// <returns></returns>
 
@@ -379,7 +404,7 @@ namespace Autodesk.AutoCAD.ApplicationServices.AIUtils
          /// <summary>
          /// A wrapper for a deferred Action that executes
          /// when the Idle event is raised. This wrapper is
-         /// primarily intended for diagnostics purposes.
+         /// primarily intended for diagnostic purposes.
          /// </summary>
 
          public class Wrapper
@@ -466,7 +491,7 @@ namespace Autodesk.AutoCAD.ApplicationServices.AIUtils
       RefreshContent = 3
    }
 
-   public delegate void RibbonStateEventHandler(object? sender, RibbonStateEventArgs e);
+   public delegate void RibbonStateEventHandler(object sender, RibbonStateEventArgs e);
 
    public class RibbonStateEventArgs : EventArgs
    {
