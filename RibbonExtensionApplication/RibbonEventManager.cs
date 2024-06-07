@@ -192,7 +192,6 @@ namespace Autodesk.AutoCAD.ApplicationServices.AIUtils
       static RibbonEventManager()
       {
          bool flag = RibbonControl != null;
-         AcConsole.TraceCtx($"RibbonEventManager() RibbonControl exists = {flag}");
          if(RibbonControl != null)
             Initialize(RibbonState.Active);
          else
@@ -208,7 +207,6 @@ namespace Autodesk.AutoCAD.ApplicationServices.AIUtils
 
       static async Task RaiseInitializeRibbon(RibbonState state)
       {
-         AcConsole.TraceCtx("RaiseInitializeRibbon()");
          if(initializeRibbon != null)
          {
             await WaitForApplicationContext();
@@ -218,14 +216,12 @@ namespace Autodesk.AutoCAD.ApplicationServices.AIUtils
 
       private static void ribbonPaletteSetCreated(object? sender, EventArgs e)
       {
-         AcConsole.TraceCtx("ribbonPaletteSetCreated()");
          RibbonServices.RibbonPaletteSetCreated -= ribbonPaletteSetCreated;
          Initialize(RibbonState.Initalizing);
       }
 
       private static void workspaceLoaded(object? sender, EventArgs e)
       {
-         AcConsole.TraceCtx("workspaceLoaded()");
          if(initializeRibbon != null)
             RaiseInitializeRibbon(RibbonState.WorkspaceLoaded);
       }
@@ -258,11 +254,9 @@ namespace Autodesk.AutoCAD.ApplicationServices.AIUtils
 
       static async void InvokeHandler(RibbonStateEventHandler handler)
       {
-         AcConsole.TraceCtx("Begin InvokeHandler()");
          await WaitForApplicationContext();
          handler(RibbonPaletteSet, new RibbonStateEventArgs(RibbonState.Active));
          initializeRibbon += handler;
-         AcConsole.TraceCtx("End InvokeHandler()");
       }
 
       static RibbonPaletteSet RibbonPaletteSet =>
@@ -353,7 +347,6 @@ namespace Autodesk.AutoCAD.ApplicationServices.AIUtils
 
          static void idle(object sender, EventArgs e)
          {
-            AcConsole.TraceCtx($"idle(): actions.Count = {actions.Count}");
             bool flag = actions.Count > 0;
             if(flag && actions.TryDequeue(out Wrapper action) && action != null)
             {
@@ -419,10 +412,6 @@ namespace Autodesk.AutoCAD.ApplicationServices.AIUtils
                   action();
                   elapsed = DateTime.Now - start;
                   action = null;
-                  AcConsole.TraceCtx("Wrapper.Invoke(): " +
-                     "delay: {0:f2}  elapsed: {1:f2}",
-                     delay.TotalMilliseconds, 
-                     elapsed.TotalMilliseconds);
                }
             }
 
