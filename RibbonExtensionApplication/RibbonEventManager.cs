@@ -353,8 +353,8 @@ namespace Autodesk.AutoCAD.ApplicationServices.AIUtils
             {
                if(actions.Count == 0)
                   Application.Idle -= idle;
-               /// Not really necessary, because the Idle
-               /// event always runs on the main thread:
+               /// Not really necessary, because Idle event 
+               /// handlers always run on the main thread:
                AcRx.SynchronizationContext.Current?.Post(
                   (a) => ((Wrapper)a).Invoke(), action);
             }
