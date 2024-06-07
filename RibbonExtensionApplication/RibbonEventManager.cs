@@ -216,10 +216,8 @@ namespace Autodesk.AutoCAD.ApplicationServices.AIUtils
 
       private static async void workspaceLoaded(object sender, EventArgs e)
       {
-         AcConsole.TraceCtx($"workspaceLoaded");
-         Console.Beep();
          if(initializeRibbon != null)
-            await RaiseInitializeRibbon(RibbonState.WorkspaceLoaded);
+            RaiseInitializeRibbon(RibbonState.WorkspaceLoaded);
       }
 
       /// <summary>
