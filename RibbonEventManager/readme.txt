@@ -1,4 +1,4 @@
-RibbonExtensionApplication is being deprecated
+RibbonExtensionApplication has been deprecated
 in favor of RibbonEventManager.
 
 The reasons arise largely out of the fact that some who need 
