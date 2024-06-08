@@ -84,7 +84,7 @@ namespace Autodesk.AutoCAD.Runtime
    /// the ribbon, which includes:
    ///   
    ///   1. When the handler is added to the Initialize
-   ///      ribbon event.
+   ///      ribbon event and the ribbon exists.
    ///   
    ///   2. When the ribbon is first created and shown 
    ///      if it did not exist when the handler was 
