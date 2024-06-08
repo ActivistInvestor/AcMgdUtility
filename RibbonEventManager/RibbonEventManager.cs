@@ -83,8 +83,9 @@ namespace Autodesk.AutoCAD.Runtime
    /// called whenever it is necessary to add content to 
    /// the ribbon, which includes:
    ///   
-   ///   1. When the handler is added to the Initialize
-   ///      ribbon event and the ribbon exists.
+   ///   1. When the handler is first added to the 
+   ///      InitializeRibbon event and the ribbon 
+   ///      exists.
    ///   
    ///   2. When the ribbon is first created and shown 
    ///      if it did not exist when the handler was 
