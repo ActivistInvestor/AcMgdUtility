@@ -7,18 +7,18 @@
 /// 
 /// Source:
 ///   
-///   https://github.com/ActivistInvestor/AcMgdUtility/blob/main/RibbonExtensionApplication/RibbonEventManager.cs
+///   https://github.com/ActivistInvestor/AcMgdUtility/blob/main/RibbonEventManager/RibbonEventManager.cs
 ///
 
 using System;
 using System.Collections.Concurrent;
 using System.Runtime.CompilerServices;
+using Autodesk.AutoCAD.ApplicationServices;
 using Autodesk.AutoCAD.Ribbon;
 using Autodesk.Windows;
-using Autodesk.AutoCAD.Runtime;
 using AcRx = Autodesk.AutoCAD.Runtime;
 
-namespace Autodesk.AutoCAD.ApplicationServices.AIUtils
+namespace Autodesk.AutoCAD.Runtime
 {
    /// <summary>
    /// This class provides the functionality of the 
@@ -67,8 +67,7 @@ namespace Autodesk.AutoCAD.ApplicationServices.AIUtils
    ///      
    ///      private void LoadMyRibbonContent(object sender, RibbonStateEventArgs e)
    ///      {
-   ///         // Here, one can safely assume
-   ///         // that the ribbon exists.
+   ///         // Here, one can safely assume the ribbon exists.
    ///         
    ///         // TODO: Add content to ribbon.
    ///      }
@@ -84,7 +83,8 @@ namespace Autodesk.AutoCAD.ApplicationServices.AIUtils
    /// called whenever it is necessary to add content to 
    /// the ribbon, which includes:
    ///   
-   ///   1. At startup if the ribbon exists.
+   ///   1. When the handler is added to the Initialize
+   ///      ribbon event.
    ///   
    ///   2. When the ribbon is first created and shown 
    ///      if it did not exist when the handler was 
@@ -103,17 +103,10 @@ namespace Autodesk.AutoCAD.ApplicationServices.AIUtils
    ///    IdleAwaiter class, to defer execution of code 
    ///    until the next Application.Idle event is raised.
    /// 
-   /// 2. Previous reports that handlers of the InitializeRibbon
-   ///    event were adding multiple instances of ribbon items
-   ///    (namely Tabs) to the ribbon have proven to be false,
-   ///    and was verified by examining the source code that
-   ///    raises the event that triggers the InitializeRibbon
-   ///    event to fire.
-   ///    
-   ///    A workaround for the unlikely possiblity that other 
-   ///    unknown circumstances can result in items being added 
-   ///    to the ribbon in duplicate has been left intact, as a 
-   ///    convenience.
+   /// 2. A new AddRibbonTabs() method was added to the event
+   ///    argument type (RibbonStateEventArgs), that will add
+   ///    one or more ribbon tabs to the ribbon if they are not
+   ///    already present on the ribbon.
    ///    
    /// This example handler for the InitializeRibbon event 
    /// shows how the AddRibbonTabs() method can be used to add 
@@ -167,6 +160,7 @@ namespace Autodesk.AutoCAD.ApplicationServices.AIUtils
    ///    
    ///    - CUI command
    ///    - MENULOAD command.
+   ///    - CUILOAD/CUIUNLOAD commands.
    ///    
    /// In all of the above cases, the InitializeRibbon 
    /// event is raised.
@@ -186,7 +180,7 @@ namespace Autodesk.AutoCAD.ApplicationServices.AIUtils
 
       static RibbonEventManager()
       {
-         if(RibbonControl != null)
+         if(RibbonCreated)
             Initialize(RibbonState.Active);
          else
             RibbonServices.RibbonPaletteSetCreated += ribbonPaletteSetCreated;
@@ -216,7 +210,8 @@ namespace Autodesk.AutoCAD.ApplicationServices.AIUtils
 
       private static async void workspaceLoaded(object sender, EventArgs e)
       {
-         await RaiseInitializeRibbon(RibbonState.WorkspaceLoaded);
+         if(RibbonControl != null)
+            await RaiseInitializeRibbon(RibbonState.WorkspaceLoaded);
       }
 
       /// <summary>
@@ -253,10 +248,12 @@ namespace Autodesk.AutoCAD.ApplicationServices.AIUtils
          initializeRibbon += handler;
       }
 
-      static RibbonPaletteSet RibbonPaletteSet =>
+      public static bool RibbonCreated => RibbonControl != null;
+
+      public static RibbonPaletteSet RibbonPaletteSet =>
          RibbonServices.RibbonPaletteSet;
 
-      static RibbonControl? RibbonControl =>
+      public static RibbonControl? RibbonControl =>
          RibbonPaletteSet?.RibbonControl;
 
       /// Helper classes and methods excerpted from 
@@ -300,7 +297,7 @@ namespace Autodesk.AutoCAD.ApplicationServices.AIUtils
       /// A class that implements a simple means of delaying 
       /// execution of code until the next Idle event is raised.
       /// This class eliminates the need to implement a handler 
-      /// for the Idle event and add/remove it from the event.
+      /// for the Idle event and add/remove it to/from the event.
       /// 
       /// Instead, to delay the execution of an arbitrary block
       /// of code until the next Idle event is raised, one only 

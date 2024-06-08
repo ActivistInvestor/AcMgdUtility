@@ -12,11 +12,11 @@ using Autodesk.AutoCAD.ApplicationServices;
 /// RibbonEventManager class.
 /// 
 /// Source:
-///   
-///   https://github.com/ActivistInvestor/AcMgdUtility/blob/main/RibbonExtensionApplication/Examples/RibbonEventManagerExample.cs
+/// 
+///   https://github.com/ActivistInvestor/AcMgdUtility/blob/main/RibbonEventManager/RibbonEventManagerExample.cs
 ///
 
-/// TODO: Modify argument to be the name of 
+/// TODO: Modify the argument to be the name of 
 /// the actual IExtensionApplication-based class:
 
 [assembly: ExtensionApplication(typeof(Namespace1.MyApplication))]
