@@ -3,7 +3,7 @@ using System.Threading.Tasks;
 using Autodesk.AutoCAD.ApplicationServices;
 using AcRx = Autodesk.AutoCAD.Runtime;
 
-namespace Namespace1
+namespace Autodesk.AutoCAD.ApplicationServices
 {
    public static partial class DocumentCollectionExtensions
    {
