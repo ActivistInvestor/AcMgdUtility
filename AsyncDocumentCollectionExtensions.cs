@@ -1,11 +1,12 @@
 ﻿using System;
 using System.Threading.Tasks;
 using Autodesk.AutoCAD.ApplicationServices;
+using Autodesk.AutoCAD.Runtime;
 using AcRx = Autodesk.AutoCAD.Runtime;
 
 namespace Autodesk.AutoCAD.ApplicationServices
 {
-   public static partial class DocumentCollectionExtensions
+   public static partial class AsyncDocumentCollectionExtensions
    {
       /// <summary>
       /// A wrapper for ExecuteInCommandContextAsync()
@@ -62,7 +63,7 @@ namespace Autodesk.AutoCAD.ApplicationServices
                catch(System.Exception ex)
                {
                   if(showExceptionDialog)
-                     ex.ShowDialog();
+                     UnhandledExceptionFilter.CerOrShowExceptionDialog(ex);
                   return Task.FromException(ex);
                }
             }, null);
