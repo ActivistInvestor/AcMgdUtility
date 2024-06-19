@@ -11,7 +11,7 @@ namespace Autodesk.AutoCAD.ApplicationServices
       /// <summary>
       /// A wrapper for ExecuteInCommandContextAsync()
       /// that can be called from any execution context,
-      /// and which provides a safety-net that prevents
+      /// that also provides a safety-net that prevents
       /// AutoCAD from terminating if an exception is
       /// thrown by the delegate argument.
       /// 
@@ -93,10 +93,12 @@ namespace Autodesk.AutoCAD.ApplicationServices
       /// code that's included, you'll see that problem, which is
       /// that exceptions that are thrown by delegates passed to an
       /// awaited call to ExecuteInCommandContextAsync() cannot be 
-      /// caught by the calling code. In fact, that problem is not
-      /// specific to ExecuteInCommandContextAsync(). It applies to
-      /// any use of await in AutoCAD managed code, where a delegate
-      /// is passed to an asynchrnous awaited method.
+      /// caught by the calling code, and will terminate AutoCAD. 
+      /// 
+      /// In fact, the problem is not specific to any AutoCAD managed
+      /// API, including ExecuteInCommandContextAsync(). It applies 
+      /// to any use of await in AutoCAD, where a delegate is passed 
+      /// to an asynchrnous awaited method.
       /// 
       /// The InvokeAsCommandAsync() wrapper solves that problem by
       /// propagating exceptions thrown by the delegate passed to it, 
@@ -124,7 +126,7 @@ namespace Autodesk.AutoCAD.ApplicationServices
       /// be handled by the catch() block, and the catch() block must
       /// NOT re-throw any exceptions that are caught.
       /// 
-      /// Minimal example:
+      /// A minimal example:
       /// 
       /// <code>
       /// 
@@ -147,7 +149,8 @@ namespace Autodesk.AutoCAD.ApplicationServices
       ///      catch(System.Exception ex)
       ///      {
       ///         // deal with the exception and do NOT re-throw it!!!
-      ///         // For example:
+      ///         
+      ///         // For example, you can do this:
       ///         UnhandledExceptionFilter.CerOrShowExceptionDialog(ex);
       ///      }
       ///   }
@@ -159,7 +162,7 @@ namespace Autodesk.AutoCAD.ApplicationServices
       /// to InvokeAsCommandAsync), it will be caught by the catch() block, 
       /// allowing the caller to deal with it accordingly. The catch() block 
       /// must not re-throw exceptions, which is essentially the same as not 
-      /// having a try/catch block at all.
+      /// having try and catch blocks at all.
       /// 
       /// </remarks>
       /// </summary>
