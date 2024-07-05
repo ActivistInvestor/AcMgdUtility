@@ -12,31 +12,23 @@
 
 using System;
 using System.Collections.Concurrent;
+using System.Collections.Generic;
+using System.Linq;
 using System.Runtime.CompilerServices;
+using System.Threading.Tasks;
 using Autodesk.AutoCAD.ApplicationServices;
+// using Autodesk.AutoCAD.ApplicationServices.AsyncHelpers;
 using Autodesk.AutoCAD.Ribbon;
+using Autodesk.AutoCAD.Runtime;
 using Autodesk.Windows;
 using AcRx = Autodesk.AutoCAD.Runtime;
 
 namespace Autodesk.AutoCAD.Runtime
 {
    /// <summary>
-   /// This class provides the functionality of the 
-   /// RibbonExtensionApplication class without requiring 
-   /// an IExtensionApplication to be defined. 
-   /// 
-   /// After several revisions and bug fixes were applied
-   /// to this class, its use is highly-preferred over the 
-   /// use of RibbonExtensionApplication, which has yet to 
-   /// be revised and updated to incorporate the bug fixes 
-   /// applied to RibbonEventManager. 
-   /// 
-   /// It is also simpler to use the RibbonEventManager in 
-   /// conjunction with existing IExtensionApplications.
-   /// 
    /// RibbonEventManager exposes a single event that can be
-   /// handled to be notified whenever it may be necessary to 
-   /// add or refresh ribbon content.
+   /// handled to be notified whenever it is necessary to add 
+   /// or refresh ribbon content.
    /// 
    /// The InitializeRibbon event:
    /// 
@@ -44,9 +36,10 @@ namespace Autodesk.AutoCAD.Runtime
    /// simply add a handler to it when the application/extension
    /// is loaded (e.g., from an IExtensionApplication.Initialize
    /// method). If that is done, it isn't necessary to check to
-   /// see if the ribbon exists. One most only add a handler to
-   /// the RibbonEventManager's InitializeRibbon event, and in
-   /// the handler, add content to the ribbon.
+   /// see if the ribbon exists, add handlers to other events, etc.. 
+   /// One need only add a handler to the RibbonEventManager's 
+   /// InitializeRibbon event, and in the handler, add content to 
+   /// the ribbon.
    /// 
    /// Using this class and its single event relieves the developer
    /// from the complicated burden of having to check conditions and
@@ -67,9 +60,8 @@ namespace Autodesk.AutoCAD.Runtime
    ///      
    ///      private void LoadMyRibbonContent(object sender, RibbonStateEventArgs e)
    ///      {
-   ///         // Here, one can safely assume the ribbon exists.
-   ///         
-   ///         // TODO: Add content to ribbon.
+   ///         // Here, one can safely assume the ribbon exists,
+   ///         // and that content should be added to it.
    ///      }
    ///
    ///      public void Terminate()
@@ -85,10 +77,10 @@ namespace Autodesk.AutoCAD.Runtime
    ///   
    ///   1. When the handler is first added to the 
    ///      InitializeRibbon event and the ribbon 
-   ///      exists.
+   ///      currently exists.
    ///   
    ///   2. When the ribbon is first created and shown 
-   ///      if it did not exist when the handler was 
+   ///      when it did not exist when the handler was 
    ///      added to the InitializeRibbon event.
    ///      
    ///   3. When a workspace is loaded, after having 
@@ -109,31 +101,6 @@ namespace Autodesk.AutoCAD.Runtime
    ///    one or more ribbon tabs to the ribbon if they are not
    ///    already present on the ribbon.
    ///    
-   /// This example handler for the InitializeRibbon event 
-   /// shows how the AddRibbonTabs() method can be used to add 
-   /// a one or more ribbon tabs to the ribbon if they are not 
-   /// already present on same:
-   /// 
-   ///   Create two ribbon tabs and assign 
-   ///   them to static members:
-   ///   
-   /// <code>
-   /// 
-   ///   static RibbonTab myRibbonTab1 = new RibbonTab {....} 
-   ///   static RibbonTab myRibbonTab2 = new RibbonTab {....}
-   ///   
-   /// </code>
-   /// 
-   ///   A handler for the RibbonEventManager.InitializeRibbon event:
-   /// 
-   /// <code>
-   /// 
-   ///   void initializeRibbon(object sender, RibbonStateEventArgs e)
-   ///   {
-   ///      e.AddRibbonTabs(myRibbonTab1, myRibbonTab2);
-   ///   }
-   ///   
-   /// </code>
    /// 
    /// Test scenarios covered:
    /// 
@@ -164,7 +131,13 @@ namespace Autodesk.AutoCAD.Runtime
    ///    - CUILOAD/CUIUNLOAD commands.
    ///    
    /// In all of the above cases, the InitializeRibbon 
-   /// event is raised.
+   /// event is raised to signal that content should be
+   /// added to the ribbon.
+   /// 
+   /// To summarize, if your app adds content to the ribbon
+   /// and you want to ensure that it is always added when
+   /// needed, just handle the InitializeRibbon event, and 
+   /// add the content to the ribbon in the event's handler.
    ///    
    /// Feel free to post comments in the repo discussion
    /// regarding other scenarious not covered, or about
@@ -190,8 +163,15 @@ namespace Autodesk.AutoCAD.Runtime
       static async void Initialize(RibbonState state)
       {
          await RaiseInitializeRibbon(state);
-         RibbonPaletteSet.WorkspaceLoaded += workspaceLoaded;
-         initialized = true;
+         try
+         {
+            RibbonPaletteSet.WorkspaceLoaded += workspaceLoaded;
+            initialized = true;
+         }
+         catch(System.Exception ex) 
+         {
+            ex.ShowDialog();
+         }
       }
       
       static async Task RaiseInitializeRibbon(RibbonState state)
@@ -199,7 +179,14 @@ namespace Autodesk.AutoCAD.Runtime
          if(initializeRibbon != null)
          {
             await WaitForApplicationContext();
-            initializeRibbon?.Invoke(RibbonPaletteSet, new RibbonStateEventArgs(state));
+            try
+            {
+               initializeRibbon?.Invoke(RibbonPaletteSet, new RibbonStateEventArgs(state));
+            }
+            catch(System.Exception ex)
+            {
+               ex.ShowDialog();
+            }
          }
       }
 
@@ -245,7 +232,15 @@ namespace Autodesk.AutoCAD.Runtime
       static async void InvokeHandler(RibbonStateEventHandler handler)
       {
          await WaitForApplicationContext();
-         handler(RibbonPaletteSet, new RibbonStateEventArgs(RibbonState.Active));
+         try
+         {
+            handler(RibbonPaletteSet, new RibbonStateEventArgs(RibbonState.Active));
+         }
+         catch(Exception ex)
+         {
+            UnhandledExceptionFilter.CerOrShowExceptionDialog(ex);
+            return;
+         }
          initializeRibbon += handler;
       }
 
@@ -266,9 +261,9 @@ namespace Autodesk.AutoCAD.Runtime
       /// Idle event is raised.
       /// </summary>
 
-      public static IdleAwaiter WaitForIdle()
+      public async static Task WaitForIdle()
       {
-         return new IdleAwaiter();
+         await new IdleAwaiter(); 
       }
 
       /// <summary>
@@ -288,10 +283,10 @@ namespace Autodesk.AutoCAD.Runtime
       /// </summary>
       /// <returns></returns>
       
-      public static async Task WaitForApplicationContext()
+      public async static Task WaitForApplicationContext()
       {
          if(!documents.IsApplicationContext)
-            await WaitForIdle();
+            await IdleAwaiter.WaitOne();
       }
 
       /// <summary>
@@ -306,44 +301,42 @@ namespace Autodesk.AutoCAD.Runtime
       /// immediately following that awaited call will not run 
       /// until the next Idle event is raised.
       /// </summary>
-      
-      public struct IdleAwaiter : INotifyCompletion
+
+      public class IdleAwaiter : INotifyCompletion
       {
-         static ConcurrentQueue<Wrapper> actions = 
-            new ConcurrentQueue<Wrapper>();
+         static ConcurrentQueue<Action> actions = new ConcurrentQueue<Action>();
 
          public void OnCompleted(Action continuation)
          {
-            if(continuation != null)
-            {
-               bool wasEmpty = actions.Count == 0;
-               actions.Enqueue(continuation);
-               if(wasEmpty && actions.Count > 0)
-                  Application.Idle += idle;
-            }
+            bool flag = actions.Count == 0;
+            actions.Enqueue(continuation);
+            if(flag && actions.Count > 0)
+               Application.Idle += idle;
          }
-
-         /// To avoid bogging down the UI, only one 
-         /// continuation is dequeued and run each 
-         /// time the Idle event is raised.
 
          static void idle(object sender, EventArgs e)
          {
-            bool flag = actions.Count > 0;
-            if(flag && actions.TryDequeue(out Wrapper action) && action != null)
+            Action continuation = null;
+            if(actions.TryDequeue(out continuation) && continuation != null)
             {
                if(actions.Count == 0)
                   Application.Idle -= idle;
-               /// Not really necessary, because Idle event 
-               /// handlers always run on the main thread:
-               AcRx.SynchronizationContext.Current?.Post(
-                  (a) => ((Wrapper)a).Invoke(), action);
+               try
+               {
+                  continuation.Invoke();
+               }
+               catch(System.Exception ex)
+               {
+                  Application.DocumentManager.MdiActiveDocument?.
+                     Editor.WriteMessage(ex.ToString());
+                  // Cannot rethrow the exception
+               }
             }
          }
 
          /// <summary>
-         /// Delays execution of code following an awaited call 
-         /// to this method until the next Idle event is raised.
+         /// Executes the awaited continuation when 
+         /// the next Application.Idle event is raised.
          /// </summary>
          /// <returns></returns>
 
@@ -357,60 +350,6 @@ namespace Autodesk.AutoCAD.Runtime
          public bool IsCompleted { get { return false; } }
 
          public void GetResult() { }
-
-         /// <summary>
-         /// A wrapper for a deferred Action that executes
-         /// when the Idle event is raised. This wrapper is
-         /// primarily intended for diagnostic purposes.
-         /// </summary>
-
-         public class Wrapper
-         {
-            DateTime start = DateTime.Now;
-            TimeSpan elapsed = TimeSpan.Zero;
-            TimeSpan delay = TimeSpan.Zero;
-            Action action;
-
-            public Wrapper(Action action)
-            {
-               this.action = action;
-            }
-
-            /// <summary>
-            /// The timespan from instance creation to
-            /// the point when the action is invoked.
-            /// 
-            /// Execution time of the action is Elapsed - Delay
-            /// </summary>
-            public TimeSpan Delay => delay;
-
-            /// <summary>
-            /// The timespan from instance creation to 
-            /// the point when the invoked action returns.
-            /// </summary>
-            public TimeSpan Elapsed => elapsed;
-
-            public void Invoke()
-            {
-               if(action != null)
-               {
-                  delay = DateTime.Now - start;
-                  action();
-                  elapsed = DateTime.Now - start;
-                  action = null;
-               }
-            }
-
-            public static implicit operator Action(Wrapper wrapper)
-            {
-               return wrapper.action;
-            }
-
-            public static implicit operator Wrapper(Action action)
-            {
-               return new Wrapper(action);
-            }
-         }
 
       }
    }
@@ -526,6 +465,18 @@ namespace Autodesk.AutoCAD.Ribbon
          return result;
       }
 
+   }
+
+   public static partial class ExceptionExtensions
+   {
+      public static System.Exception ShowDialog(this System.Exception ex)
+      {
+         if(ex != null)
+         {
+            UnhandledExceptionFilter.CerOrShowExceptionDialog(ex);
+         }
+         return ex;
+      }
    }
 
 }
