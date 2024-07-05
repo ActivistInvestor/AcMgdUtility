@@ -17,11 +17,9 @@ using System.Linq;
 using System.Runtime.CompilerServices;
 using System.Threading.Tasks;
 using Autodesk.AutoCAD.ApplicationServices;
-// using Autodesk.AutoCAD.ApplicationServices.AsyncHelpers;
 using Autodesk.AutoCAD.Ribbon;
 using Autodesk.AutoCAD.Runtime;
 using Autodesk.Windows;
-using AcRx = Autodesk.AutoCAD.Runtime;
 
 namespace Autodesk.AutoCAD.Runtime
 {
@@ -426,7 +424,7 @@ namespace Autodesk.AutoCAD.Runtime
 }
 
 namespace Autodesk.AutoCAD.Ribbon
-{ 
+{
    public static partial class RibbonControlExtensions
    {
       /// <summary>
