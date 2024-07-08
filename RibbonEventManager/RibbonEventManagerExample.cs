@@ -1,9 +1,8 @@
 ﻿
 using Autodesk.AutoCAD.Runtime;
-using Autodesk.AutoCAD.ApplicationServices.AIUtils;
 using Autodesk.Windows;
 using Autodesk.AutoCAD.ApplicationServices;
-
+using System;
 
 /// RibbonEventManagerExample.cs
 /// ActivistInvestor / Tony T
@@ -25,23 +24,46 @@ namespace Namespace1
 {
    public class MyApplication : IExtensionApplication
    {
+      /// Ribbon content should be assigned 
+      /// to a static member variable:
+      
       static RibbonTab myRibbonTab;
 
+      /// <summary>
+      /// IExtensionApplication.Initialize
+      /// 
+      /// Note: When using the RibbonEventManager,
+      /// there is no need to defer execution of
+      /// code until the Application.Idle event is
+      /// raised, as the RibbonEventManager already
+      /// does that for the programmer.
+      /// 
+      /// The handler for the InitializeRibbon event
+      /// will not be called until the next Idle event 
+      /// is raised.
+      /// 
+      /// </summary>
+      
       public void Initialize()
       {
          /// Add a handler to the InitializeRibbon event.
 
-         RibbonEventManager.InitializeRibbon += initializeRibbon;
+         RibbonEventManager.InitializeRibbon += LoadMyRibbonContent;
       }
 
       /// <summary>
-      /// Handler for the InitializeRibbon event:
+      /// Handler for the InitializeRibbon event.
+      /// 
+      /// This handler can be called multiple times,
+      /// such as when a workspace is loaded. See the
+      /// docs for RibbonEventManager for details on
+      /// when/why this event handler will be called.
       /// </summary>
 
-      private void initializeRibbon(object sender, RibbonStateEventArgs e)
+      private void LoadMyRibbonContent(object sender, RibbonStateEventArgs e)
       {
-         /// Create a ribbon tab on the 
-         /// first call to this method:
+         /// Create the ribbon content if it has
+         /// not already been created:
 
          if(myRibbonTab == null)
          {
@@ -51,9 +73,10 @@ namespace Namespace1
             myRibbonTab.Title = "MyRibbonTab";
          }
          
-         /// Add the tab to the ribbon:
+         /// Add the content to the ribbon:
          
          e.RibbonControl.Tabs.Add(myRibbonTab);
+
       }
 
       public void Terminate()

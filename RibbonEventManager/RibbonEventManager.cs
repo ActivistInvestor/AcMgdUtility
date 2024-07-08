@@ -20,6 +20,7 @@ using Autodesk.AutoCAD.ApplicationServices;
 using Autodesk.AutoCAD.Ribbon;
 using Autodesk.AutoCAD.Runtime;
 using Autodesk.Windows;
+using AcRx = Autodesk.AutoCAD.Runtime;
 
 namespace Autodesk.AutoCAD.Runtime
 {
@@ -99,6 +100,11 @@ namespace Autodesk.AutoCAD.Runtime
    ///    one or more ribbon tabs to the ribbon if they are not
    ///    already present on the ribbon.
    ///    
+   /// 7/7/24
+   /// 
+   /// 1. Revision 1 above has been rolled-back due to issues
+   ///    related to unhandled exceptions thrown from await'ed 
+   ///    continuations, that cause AutoCAD to terminate.
    /// 
    /// Test scenarios covered:
    /// 
@@ -158,33 +164,41 @@ namespace Autodesk.AutoCAD.Runtime
             RibbonServices.RibbonPaletteSetCreated += ribbonPaletteSetCreated;
       }
 
-      static async void Initialize(RibbonState state)
+      static void Initialize(RibbonState state)
       {
-         await RaiseInitializeRibbon(state);
-         try
+         Idle.Invoke(delegate ()
          {
+            if(initializeRibbon != null)
+            {
+               try
+               {
+                  initializeRibbon?.Invoke(RibbonPaletteSet, new RibbonStateEventArgs(state));
+               }
+               catch(System.Exception ex)
+               {
+                  ex.ShowDialog();
+               }
+            }
             RibbonPaletteSet.WorkspaceLoaded += workspaceLoaded;
             initialized = true;
-         }
-         catch(System.Exception ex) 
-         {
-            ex.ShowDialog();
-         }
+         });
       }
       
-      static async Task RaiseInitializeRibbon(RibbonState state)
+      static void RaiseInitializeRibbon(RibbonState state)
       {
          if(initializeRibbon != null)
          {
-            await WaitForApplicationContext();
-            try
+            Idle.Invoke(delegate ()
             {
-               initializeRibbon?.Invoke(RibbonPaletteSet, new RibbonStateEventArgs(state));
-            }
-            catch(System.Exception ex)
-            {
-               ex.ShowDialog();
-            }
+               try
+               {
+                  initializeRibbon?.Invoke(RibbonPaletteSet, new RibbonStateEventArgs(state));
+               }
+               catch(System.Exception ex)
+               {
+                  ex.ShowDialog();
+               }
+            });
          }
       }
 
@@ -194,10 +208,10 @@ namespace Autodesk.AutoCAD.Runtime
          Initialize(RibbonState.Initalizing);
       }
 
-      private static async void workspaceLoaded(object sender, EventArgs e)
+      private static void workspaceLoaded(object sender, EventArgs e)
       {
          if(RibbonControl != null)
-            await RaiseInitializeRibbon(RibbonState.WorkspaceLoaded);
+            RaiseInitializeRibbon(RibbonState.WorkspaceLoaded);
       }
 
       /// <summary>
@@ -227,19 +241,21 @@ namespace Autodesk.AutoCAD.Runtime
          }
       }
 
-      static async void InvokeHandler(RibbonStateEventHandler handler)
+      static void InvokeHandler(RibbonStateEventHandler handler)
       {
-         await WaitForApplicationContext();
-         try
+         Idle.Invoke(delegate ()
          {
-            handler(RibbonPaletteSet, new RibbonStateEventArgs(RibbonState.Active));
-         }
-         catch(Exception ex)
-         {
-            UnhandledExceptionFilter.CerOrShowExceptionDialog(ex);
-            return;
-         }
-         initializeRibbon += handler;
+            try
+            {
+               handler(RibbonPaletteSet, new RibbonStateEventArgs(RibbonState.Active));
+            }
+            catch(Exception ex)
+            {
+               UnhandledExceptionFilter.CerOrShowExceptionDialog(ex);
+               return;
+            }
+            initializeRibbon += handler;
+         });
       }
 
       public static bool RibbonCreated => RibbonControl != null;
@@ -250,106 +266,38 @@ namespace Autodesk.AutoCAD.Runtime
       public static RibbonControl? RibbonControl =>
          RibbonPaletteSet?.RibbonControl;
 
-      /// Helper classes and methods excerpted from 
-      /// DocumentCollectionExtensions.cs
+      /// Helper classes
       /// 
       /// <summary>
-      /// Delays execution of code that follows an 
-      /// awaited call to this method until the next 
-      /// Idle event is raised.
-      /// </summary>
-
-      public async static Task WaitForIdle()
-      {
-         await new IdleAwaiter(); 
-      }
-
-      /// <summary>
-      /// Similar to WaitForIdle(), except that it doesn't
-      /// wait if called from the application context.
-      /// 
-      /// If called from the document context, this method
-      /// waits for the next Idle event to be raised before
-      /// returning, and the continuation executes in the 
-      /// application context. 
-      /// 
-      /// If called from the application context, this 
-      /// method returns immediately. 
-      /// 
-      /// In any case, the continuation executes in
-      /// the application context.
-      /// </summary>
-      /// <returns></returns>
-      
-      public async static Task WaitForApplicationContext()
-      {
-         if(!documents.IsApplicationContext)
-            await IdleAwaiter.WaitOne();
-      }
-
-      /// <summary>
-      /// A class that implements a simple means of delaying 
-      /// execution of code until the next Idle event is raised.
-      /// This class eliminates the need to implement a handler 
-      /// for the Idle event and add/remove it to/from the event.
-      /// 
-      /// Instead, to delay the execution of an arbitrary block
-      /// of code until the next Idle event is raised, one only 
-      /// needs to call 'await IdleAWaiter.WaitOne()'. Any code 
-      /// immediately following that awaited call will not run 
+      /// Delays execution of a supplied action 
       /// until the next Idle event is raised.
       /// </summary>
 
-      public class IdleAwaiter : INotifyCompletion
+      public class Idle
       {
-         static ConcurrentQueue<Action> actions = new ConcurrentQueue<Action>();
+         Action action;
 
-         public void OnCompleted(Action continuation)
+         Idle(Action action)
          {
-            bool flag = actions.Count == 0;
-            actions.Enqueue(continuation);
-            if(flag && actions.Count > 0)
-               Application.Idle += idle;
-         }
-
-         static void idle(object sender, EventArgs e)
-         {
-            Action continuation = null;
-            if(actions.TryDequeue(out continuation) && continuation != null)
+            Application.DocumentManager.ExecuteInApplicationContext(delegate (object o)
             {
-               if(actions.Count == 0)
-                  Application.Idle -= idle;
                try
                {
-                  continuation.Invoke();
+                  action();
                }
                catch(System.Exception ex)
                {
-                  Application.DocumentManager.MdiActiveDocument?.
-                     Editor.WriteMessage(ex.ToString());
-                  // Cannot rethrow the exception
+                  UnhandledExceptionFilter.CerOrShowExceptionDialog(ex);
                }
-            }
+            }, null);
          }
 
-         /// <summary>
-         /// Executes the awaited continuation when 
-         /// the next Application.Idle event is raised.
-         /// </summary>
-         /// <returns></returns>
-
-         public static IdleAwaiter WaitOne()
+         public static void Invoke(Action action)
          {
-            return new IdleAwaiter();
+            new Idle(action);
          }
-
-         public IdleAwaiter GetAwaiter() { return this; }
-
-         public bool IsCompleted { get { return false; } }
-
-         public void GetResult() { }
-
       }
+
    }
 
    /// <summary>
