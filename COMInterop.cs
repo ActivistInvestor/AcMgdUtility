@@ -16,6 +16,18 @@
 /// Use the GetActiveAcadApp() method to get an active
 /// IAcadApplication object. See the docs below for more
 /// on using this with verticals.
+/// 
+/// Known Issues:
+/// 
+/// If AutoCAD is started from a shortcut to acad.exe,
+/// it does not register anything in the running object
+/// table, and this code will fail.
+/// 
+/// AutoCAD must be started from the installed startup
+/// object in the start menu in order for this code (or
+/// any COM client) to work (the object that must be used
+/// to start AutoCAD displays recently-opened files when 
+/// you right-click on it).
 
 using System;
 using System.Collections.Generic;
