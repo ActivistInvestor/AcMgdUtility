@@ -19,15 +19,14 @@
 /// 
 /// Known Issues:
 /// 
-/// If AutoCAD is started from a shortcut to acad.exe,
-/// it does not register anything in the running object
-/// table, and this code will fail.
-/// 
-/// AutoCAD must be started from the installed startup
-/// object in the start menu in order for this code (or
-/// any COM client) to work (the object that must be used
-/// to start AutoCAD displays recently-opened files when 
-/// you right-click on it).
+/// If AutoCAD is started from a shortcut to acad.exe
+/// that has the /nologo switch (which suppresses the
+/// splash screen), it does not register anything in 
+/// the ROT, and this code will fail. Any use of the
+/// /nologo switch in a DOS command line will have the
+/// same effect (it seems that the splash screen code
+/// is doing the COM registration).
+ 
 
 using System;
 using System.Collections.Generic;
