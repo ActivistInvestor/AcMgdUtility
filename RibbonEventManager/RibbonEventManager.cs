@@ -1,6 +1,8 @@
 ﻿/// RibbonEventManager.cs
 /// ActivistInvestor / Tony T
 /// 
+/// Simplified ribbon content management:
+/// 
 /// A class that provides a simplified means of 
 /// initializing and managing application-provided
 /// content added to AutoCAD's ribbon.
@@ -11,16 +13,12 @@
 ///
 
 using System;
-using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Linq;
-using System.Runtime.CompilerServices;
-using System.Threading.Tasks;
 using Autodesk.AutoCAD.ApplicationServices;
 using Autodesk.AutoCAD.Ribbon;
 using Autodesk.AutoCAD.Runtime;
 using Autodesk.Windows;
-using AcRx = Autodesk.AutoCAD.Runtime;
 
 namespace Autodesk.AutoCAD.Runtime
 {

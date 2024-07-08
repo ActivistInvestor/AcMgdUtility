@@ -1,8 +1,6 @@
 ﻿
 using Autodesk.AutoCAD.Runtime;
 using Autodesk.Windows;
-using Autodesk.AutoCAD.ApplicationServices;
-using System;
 
 /// RibbonEventManagerExample.cs
 /// ActivistInvestor / Tony T
