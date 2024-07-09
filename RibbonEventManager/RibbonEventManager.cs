@@ -149,7 +149,6 @@ namespace Autodesk.AutoCAD.Runtime
 
    public static class RibbonEventManager
    {
-
       static DocumentCollection documents = Application.DocumentManager;
       static bool initialized = false;
       static event RibbonStateEventHandler initializeRibbon = null;
@@ -271,31 +270,42 @@ namespace Autodesk.AutoCAD.Runtime
       /// until the next Idle event is raised.
       /// </summary>
 
-      public class Idle
+      class Idle
       {
          Action action;
-
+         static Idle current = null;
          Idle(Action action)
          {
-            Application.DocumentManager.ExecuteInApplicationContext(delegate (object o)
+            this.action = action;
+            Application.Idle += idle;
+         }
+
+         public static void Invoke(Action action, bool deferred = false)
+         {
+            if(current != null && !deferred)
+               action();
+            else
+               new Idle(action);
+         }
+
+         private void idle(object sender, EventArgs e)
+         {
+            Application.Idle -= idle;
+            current = this;
+            try
             {
-               try
+               if(action != null)
                {
                   action();
+                  action = null;
                }
-               catch(System.Exception ex)
-               {
-                  UnhandledExceptionFilter.CerOrShowExceptionDialog(ex);
-               }
-            }, null);
-         }
-
-         public static void Invoke(Action action)
-         {
-            new Idle(action);
+            }
+            finally
+            {
+               current = null;
+            }
          }
       }
-
    }
 
    /// <summary>
