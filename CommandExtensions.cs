@@ -1,4 +1,4 @@
-﻿/// CommandExtensions.cs  ActivistInvestor / Tony T.
+﻿/// CommandExtensionExamples.cs  ActivistInvestor / Tony T.
 /// 
 /// Distributed under the terms of the MIT license.
 /// 
@@ -142,7 +142,7 @@ namespace Autodesk.AutoCAD.ApplicationServices.EditorExtensions
             throw new ArgumentNullException(nameof(ids));
          Database db = editor.Document.Database;
          ObjectId ownerId = db.CurrentSpaceId;
-         var predicate = GetObjectIdPredicate<T>(false, false);
+         var predicate = GetObjectIdPredicate<T>();
          int start = ids.Count;
          db.ObjectAppended += appended;
          try
@@ -159,7 +159,7 @@ namespace Autodesk.AutoCAD.ApplicationServices.EditorExtensions
          {
             ObjectId id = e.DBObject.ObjectId;
             if(e.DBObject is T entity
-                && entity.BlockId == ownerId;
+                && entity.BlockId == ownerId
                 && predicate(id))
             {
                ids.Add(id);
@@ -167,9 +167,14 @@ namespace Autodesk.AutoCAD.ApplicationServices.EditorExtensions
          }
       }
 
+      private static void erased(object sender, ObjectErasedEventArgs e)
+      {
+         throw new NotImplementedException();
+      }
+
       /// <summary>
-      /// An asynchronous variant of Command<T>() that can be 
-      /// called from the Application context.
+      /// An asynchronous variant of Command<T>() that 
+      /// can be called from the Application context.
       /// </summary>
 
       public static async Task CommandAsync<T>(this Editor editor, 
@@ -235,26 +240,87 @@ namespace Autodesk.AutoCAD.ApplicationServices.EditorExtensions
       /// are derived from the generic argument type are to be
       /// returned.</param>
       /// <returns>The ObjectId of the last occurrence of an element
-      /// whose type is the requested type.</returns>
+      /// whose type is the requested type, or ObjectId.Null if no 
+      /// element of the requested type exists in the collection.</returns>
       /// <exception cref="ArgumentNullException"></exception>
 
       public static ObjectId Last<T>(
             this ObjectIdCollection ids,
-            bool exactMatch = false,
-            bool includingErased = false)
+            bool exactMatch = false)
          where T : DBObject
       {
          if(ids == null)
             throw new ArgumentNullException(nameof(ids));
          if(ids.Count > 0)
          {
-            var predicate = GetObjectIdPredicate<T>(exactMatch, includingErased);
-            int len = ids.Count;
-            for(int i = len - 1; i >= 0; i--)
+            var predicate = GetObjectIdPredicate<T>(exactMatch);
+            for(int i = ids.Count - 1; i > -1; i--)
             {
-               var id = ids[i];
-               if(predicate(id))
-                  return id;
+               if(predicate(ids[i]))
+                  return ids[i];
+            }
+         }
+         return ObjectId.Null;
+      }
+
+      /// <summary>
+      /// A variation of Last<T>() that allows the caller
+      /// to obtain the nth-from-last occurence of a given
+      /// type. 
+      /// 
+      /// The index argument specifies the reverse-index of
+      /// the subset of elements of the requested type, with 
+      /// a value of 0 representing the last element of the 
+      /// subset.
+      /// 
+      /// For example, to return the last occurrence, specify
+      /// an index of 0. To return the next-to-last occurence,
+      /// specify an index of 1, and so on.
+      /// 
+      /// Repeated use of this method on the same argument,
+      /// with a different index argument is not recommended,
+      /// as it is easier and far-more efficient to collect
+      /// all the elements of a desired type, and reverse their
+      /// order.
+      /// 
+      /// See the ReversOfType<T>() extension method for that
+      /// solution.
+      /// 
+      /// This returns the next-to-last Polyline in an
+      /// ObjectIdCollection:
+      /// 
+      ///    ids.Last<Polyline>(1);
+      ///   
+      /// </summary>
+      /// <typeparam name="T"></typeparam>
+      /// <param name="ids"></param>
+      /// <param name="index">The relative offset from the
+      /// end of the collection of the subset of elements of 
+      /// the given type.
+      /// etc.</param>
+      /// <param name="exactMatch"></param>
+      /// <param name="includingErased"></param>
+      /// <returns></returns>
+      /// <exception cref="ArgumentNullException"></exception>
+      
+      public static ObjectId Last<T>(
+            this ObjectIdCollection ids,
+            int index,
+            bool exactMatch = false)
+         where T : DBObject
+      {
+         if(ids == null)
+            throw new ArgumentNullException(nameof(ids));
+         if(index < 0 || index >= ids.Count)
+            throw new IndexOutOfRangeException(nameof(index));
+         if(ids.Count > 0)
+         {
+            int found = 0;
+            var predicate = GetObjectIdPredicate<T>(exactMatch);
+            for(int i = ids.Count - 1; i > -1; i--)
+            {
+               if(predicate(ids[i]) && index == found++)
+                  return ids[i];
             }
          }
          return ObjectId.Null;
@@ -284,23 +350,45 @@ namespace Autodesk.AutoCAD.ApplicationServices.EditorExtensions
 
       public static IEnumerable<ObjectId> OfType<T>(
             this ObjectIdCollection ids,
-            bool exactMatch = false,
-            bool includingErased = false)
+            bool exactMatch = false)
          where T : DBObject
       {
          if(ids == null)
             throw new ArgumentNullException(nameof(ids));
          if(ids.Count > 0)
          {
-            var predicate = GetObjectIdPredicate<T>(exactMatch, includingErased);
+            var predicate = GetObjectIdPredicate<T>(exactMatch);
             for(int i = 0; i < ids.Count; i++)
             {
-               var id = ids[i];
-               if(predicate(id))
-                  yield return id;
+               if(predicate(ids[i]))
+                  yield return ids[i];
             }
          }
       }
+
+      /// <summary>
+      /// Returns the same result as OfType<T>() 
+      /// returns, in reverse order:
+      /// </summary>
+
+      public static IEnumerable<ObjectId> ReverseOfType<T>(
+            this ObjectIdCollection ids,
+            bool exactMatch = false)
+         where T : DBObject
+      {
+         if(ids == null)
+            throw new ArgumentNullException(nameof(ids));
+         if(ids.Count > 0)
+         {
+            var predicate = GetObjectIdPredicate<T>(exactMatch);
+            for(int i = ids.Count - 1; i > -1; i--)
+            {
+               if(predicate(ids[i]))
+                  yield return ids[i];
+            }
+         }
+      }
+
 
       /// <summary>
       /// Returns a predicate that takes an ObjectId and
@@ -313,11 +401,11 @@ namespace Autodesk.AutoCAD.ApplicationServices.EditorExtensions
       /// is ignored and is effectively-false.
       /// </summary>
       /// <param name="type">The managed type to match</param>
-      /// <param name="exactMatch">True if the type must be an
-      /// instance of the the given Type, or false if the
-      /// type must be derived from the given Type.</param>
-      /// <param name="includingErased">A value indicating
-      /// if erased elements should match</param>
+      /// <param name="exactMatch">True if the type must be 
+      /// an instance of the the given Type, or false if the
+      /// type must be an instance of the given type, or a
+      /// derived Type. If the generic argument is abstract,
+      /// this argument is ignored and is effectively-false</param>
       /// <returns>A predicate that takes an ObjectId and 
       /// returns a value indicating if the Id matches the
       /// query criteria.</returns>
@@ -325,25 +413,13 @@ namespace Autodesk.AutoCAD.ApplicationServices.EditorExtensions
       /// <exception cref="ArgumentException"></exception>
 
       public static Func<ObjectId, bool> GetObjectIdPredicate<T>(
-         bool exactMatch = false,
-         bool includingErased = true) where T : DBObject
+         bool exactMatch = false) where T : DBObject
       {
          exactMatch &= !typeof(T).IsAbstract;
-         if(includingErased)
-         {
-            if(exactMatch)
-               return static id => id.ObjectClass == RXClass<T>.Value;
-            else
-               return static id => id.ObjectClass.IsDerivedFrom(RXClass<T>.Value);
-         }
+         if(exactMatch)
+            return RXClass<T>.MatchIdExact;
          else
-         {
-            if(exactMatch)
-               return static id => id.ObjectClass == RXClass<T>.Value && !id.IsErased;
-            else
-               return static id => !id.IsErased 
-                  && id.ObjectClass.IsDerivedFrom(RXClass<T>.Value);
-         }
+            return RXClass<T>.MatchId;
       }
 
       /// Excerpted from CollectionExtentsions.cs
@@ -392,6 +468,26 @@ namespace Autodesk.AutoCAD.ApplicationServices.EditorExtensions
    public static class RXClass<T> where T: RXObject
    {
       public static readonly RXClass Value = RXClass.GetClass(typeof(T));
+
+      public static bool MatchIdExact(ObjectId id)
+      {
+         return id.ObjectClass == Value;
+      }
+
+      public static bool MatchId(ObjectId id)
+      {
+         return id.ObjectClass.IsDerivedFrom(Value);
+      }
+
+      public static bool MatchExact(RXClass rxclass)
+      {
+         return rxclass == Value;
+      }
+
+      public static bool Match(RXClass rxclass)
+      {
+         return rxclass.IsDerivedFrom(Value);
+      }
    }
 }
 
