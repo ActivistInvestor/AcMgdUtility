@@ -1,13 +1,16 @@
 ﻿/// ssedit.cs  (c)2012 Tony Tanzillo
-/// Originally posted on the Autodesk discussion groups in 2012.
+/// Originally posted on the Autodesk discussion groups in 
+/// 2012, and was deleted sometime around 12/24. The file 
+/// is being reposted in this repository to restore access.
+/// Use and distribution is now subject to the terms of
+/// the MIT License.
 
 using System;
 using System.Collections.Generic;
 using System.Linq;
-using System.Text;
-using Autodesk.AutoCAD.Runtime;
-using Autodesk.AutoCAD.DatabaseServices;
 using Autodesk.AutoCAD.ApplicationServices;
+using Autodesk.AutoCAD.DatabaseServices;
+using Autodesk.AutoCAD.Runtime;
 
 namespace Autodesk.AutoCAD.EditorInput.MyExtensions
 {
@@ -77,7 +80,7 @@ namespace Autodesk.AutoCAD.EditorInput.MyExtensions
    
    public static class SSEditExampleCommands
    {
-      [CommandMethod("SSEDIT")]
+      [CommandMethod("SSEDIT", CommandFlags.Redraw)]
       public static void SSEdit()
       {
          try
@@ -99,9 +102,13 @@ namespace Autodesk.AutoCAD.EditorInput.MyExtensions
             PromptSelectionResult result = ed.EditSelection(psr.Value);
 
             if(result != null && result.Value != null)
+            {
+               ed.SetImpliedSelection(result.Value.GetObjectIds());
                doc.Editor.WriteMessage(
                   "\nEdited selection Count = {0}",
                   result.Value.Count);
+               ed.UpdateScreen();
+            }
          }
          catch(System.Exception ex)
          {
