@@ -1,6 +1,6 @@
 ﻿/// ssedit.cs  (c)2012 Tony Tanzillo
 /// Originally posted on the Autodesk discussion groups in 
-/// 2012, and was deleted sometime around 12/24. The file 
+/// 2012, and  deleted sometime around 12/12/24. This file 
 /// is being reposted in this repository to restore access.
 /// Use and distribution is now subject to the terms of
 /// the MIT License.
