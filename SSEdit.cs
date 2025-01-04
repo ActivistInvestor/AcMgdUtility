@@ -1,4 +1,6 @@
 ﻿/// ssedit.cs  (c)2012 Tony Tanzillo
+/// Originally posted on the Autodesk discussion groups in 2012.
+
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -9,7 +11,7 @@ using Autodesk.AutoCAD.ApplicationServices;
 
 namespace Autodesk.AutoCAD.EditorInput.MyExtensions
 {
-   public static class EditorExtensionMethods
+   public static partial class EditorExtensionMethods
    {
       public static PromptSelectionResult EditSelection(this Editor ed, SelectionSet ss, PromptSelectionOptions options = null)
       {
@@ -22,7 +24,13 @@ namespace Autodesk.AutoCAD.EditorInput.MyExtensions
       }
    }
 
-   class SelectionSetEditor
+   /// <summary>
+   /// A class that allows a selection of objects to be 
+   /// edited interactively, allowing the user to remove
+   /// and/or add objects to the selection.
+   /// </summary>
+   
+   public class SelectionSetEditor
    {
       Editor ed = null;
       PromptSelectionOptions options = null;
@@ -35,9 +43,9 @@ namespace Autodesk.AutoCAD.EditorInput.MyExtensions
 
       public SelectionSetEditor(Editor editor, IEnumerable<ObjectId> ss, PromptSelectionOptions options = null)
       {
-         if(editor == null)
+         if(editor is null)
             throw new ArgumentNullException("editor");
-         if(ss == null)
+         if(ss is null)
             throw new ArgumentNullException("ss");
          this.ed = editor;
          this.options = options ?? new PromptSelectionOptions();
@@ -49,6 +57,7 @@ namespace Autodesk.AutoCAD.EditorInput.MyExtensions
       private void keywordInput(object sender, SelectionTextInputEventArgs e)
       {
          options.KeywordInput -= keywordInput;
+         options.Keywords.Clear();
          e.AddObjects(selection.ToArray());
       }
 
@@ -56,13 +65,16 @@ namespace Autodesk.AutoCAD.EditorInput.MyExtensions
       {
          if(this.selection.Any())
          {
-            /// A kludge that triggers a call to the keywordInput() method:
             ed.Document.SendStringToExecute("Edit\n", true, false, false);
          }
          return ed.GetSelection(options);
       }
    }
 
+   /// <summary>
+   /// An example showing how the SelectionSetEditor class is used:
+   /// </summary>
+   
    public static class SSEditExampleCommands
    {
       [CommandMethod("SSEDIT")]
