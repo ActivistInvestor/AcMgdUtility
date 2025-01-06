@@ -4,6 +4,8 @@
 /// published on the Autodesk discussion group server in 
 /// 2012.
 /// 
+/// More recent updates: 
+/// 
 /// A revision was made to eliminate a distracting message
 /// from appearing when the EditSelection() extension method
 /// is called ("nnn found"). that appeared before the initial
@@ -19,14 +21,11 @@
 /// method specifies if the editor is zoomed to the extents of 
 /// the selection set to be edited. The value of this argument 
 /// is false by default.
-/// 
-
 
 using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
-using AcMgdLib.Overrules.Examples;
 using Autodesk.AutoCAD.ApplicationServices;
 using Autodesk.AutoCAD.DatabaseServices;
 using Autodesk.AutoCAD.Internal;
@@ -108,9 +107,9 @@ namespace Autodesk.AutoCAD.EditorInput
    }
 
    /// <summary>
-   /// A class that allows a selection of objects to be 
-   /// edited interactively, allowing the user to remove
-   /// and/or add objects from/to the selection.
+   /// A class that allows the contents of a selection set
+   /// to be edited interactively, allowing the user to add
+   /// and/or remove objects to/from the selection.
    /// </summary>
 
    class SelectionSetEditor
@@ -254,18 +253,13 @@ namespace Autodesk.AutoCAD.EditorInput
    }
 
    /// <summary>
-   /// Lifted from Common/SystemVariable.cs
+   /// Lifted from SystemVariable.cs
    /// </summary>
 
    class SysVar : IDisposable
    {
       object oldvalue = null;
       string name;
-
-      public SysVar((string Name, object Value) item)
-         : this(item.Name, item.Value)
-      {
-      }
 
       public SysVar(string name, object value)
       {
