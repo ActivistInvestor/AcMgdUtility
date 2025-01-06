@@ -4,12 +4,6 @@
 /// published on the Autodesk discussion group server in 
 /// 2012.
 /// 
-/// Updated:
-/// 
-/// After testing the code to verify that it continues to
-/// work in recent AutoCAD releases (up to 2025), several
-/// revisions and enhancements were made:
-/// 
 /// A revision was made to eliminate a distracting message
 /// from appearing when the EditSelection() extension method
 /// is called ("nnn found"). that appeared before the initial
