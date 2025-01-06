@@ -20,9 +20,7 @@
 /// the selection set to be edited. The value of this argument 
 /// is false by default.
 /// 
-/// Please let me know about any issues you may encounter
-/// with the newly-added functionality.
-/// 
+
 
 using System;
 using System.Collections.Generic;
