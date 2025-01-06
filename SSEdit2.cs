@@ -4,7 +4,7 @@
 /// published on the Autodesk discussion group server in 
 /// 2012.
 /// 
-/// Recent updates: 
+/// Updated:
 /// 
 /// After testing the code to verify that it continues to
 /// work in recent AutoCAD releases (up to 2025), several
