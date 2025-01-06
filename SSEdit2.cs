@@ -1,16 +1,18 @@
 ﻿/// ssedit2.cs  (c)2012 Tony Tanzillo
 /// 
-/// An updated version of ssedit.cs
+/// An updated version of ssedit.cs, that was originally 
+/// published on the Autodesk discussion group server in 
+/// 2012.
 /// 
 /// Recent updates: 
 /// 
-/// After testing this code to verify that it continues to
+/// After testing the code to verify that it continues to
 /// work in recent AutoCAD releases (up to 2025), several
 /// revisions and enhancements were made:
 /// 
 /// A revision was made to eliminate a distracting message
 /// from appearing when the EditSelection() extension method
-/// is called ("nnn found") that appeared before the initial
+/// is called ("nnn found"). that appeared before the initial
 /// "Select objects: " prompt was displayed.
 /// 
 /// Zoom support:
@@ -127,7 +129,7 @@ namespace Autodesk.AutoCAD.EditorInput
       const string keyword = "SSEDIT";
 
       public SelectionSetEditor(Editor editor, SelectionSet ss, PromptSelectionOptions options = null)
-         : this(editor, ss != null ? ss.GetObjectIds() : null, options)
+         : this(editor, ss?.GetObjectIds(), options)
       {
       }
 
@@ -211,8 +213,10 @@ namespace Autodesk.AutoCAD.EditorInput
          if(zoom)
             ZoomObjects(ed, this.selection, 0.95);
          if(selection is not null && selection.Length > 0)
+         {
+            options.KeywordInput += keywordInput;
             ed.Document.SendStringToExecute($"{keyword}\n", true, false, false);
-         options.KeywordInput += keywordInput;
+         }
          return ed.GetSelection(options);
       }
 
@@ -344,7 +348,7 @@ namespace Autodesk.AutoCAD.EditorInput
             ed.WriteMessage("\nSpecify objects to add " +
                "to/remove from original selection,");
 
-            PromptSelectionResult result = ed.EditSelection(currentSelection, null, true);
+            PromptSelectionResult result = ed.EditSelection(currentSelection);
 
             if(result != null && result.Value != null)
             {
