@@ -1,4 +1,4 @@
-﻿/// ssedit2025.cs  (c)2012 Tony Tanzillo
+﻿/// ssedit2.cs  (c)2012 Tony Tanzillo
 /// 
 /// An updated version of ssedit.cs
 /// 
