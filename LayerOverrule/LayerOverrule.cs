@@ -9,36 +9,6 @@ using Autodesk.AutoCAD.Runtime;
 
 /// Note: this code requires a reference to AcLayer.dll
 
-namespace AcMgdLib.Overrules.Examples
-{
-
-   /// <summary>
-   /// Implementing the above example in a managed extension
-   /// requires it to be initialized in the Initialize() method
-   /// of an IExtensionApplication. The containing assembly
-   /// must also have the assembly:ExtensionApplication()
-   /// attribute to tell the runtime that the class should
-   /// initialized when the assembly is loaded. 
-   /// 
-   /// If there is an existing IExtensionApplication, the 
-   /// call to the Singleton<T>.Enabled property shown below 
-   /// can be placed in the existing IExtensionApplication's 
-   /// Initlialize() method, and this class can be omitted.
-   /// </summary>
-
-   ///  public class MyApplication : IExtensionApplication
-   ///  {
-   ///     public void Initialize()
-   ///     {
-   ///        Singleton<MyNoLockLayerOverrule>.Enabled = true;
-   ///     }
-   ///  
-   ///     public void Terminate()
-   ///     {
-   ///     }
-   ///  }
-}
-
 namespace AcMgdLib.Overrules
 {
    /// <summary>
