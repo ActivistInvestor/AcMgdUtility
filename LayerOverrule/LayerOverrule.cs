@@ -7,28 +7,30 @@ using Autodesk.AutoCAD.Internal;
 using Autodesk.AutoCAD.LayerManager;
 using Autodesk.AutoCAD.Runtime;
 
+/// Note: this code requires a reference to AcLayer.dll
+
 namespace AcMgdLib.Overrules.Examples
 {
 
    /// <summary>
    /// Implementing the above example in a managed extension
-   /// requires it to be initialized in the Initializ7e() method
+   /// requires it to be initialized in the Initialize() method
    /// of an IExtensionApplication. The containing assembly
    /// must also have the assembly:ExtensionApplication()
    /// attribute to tell the runtime that the class should
    /// initialized when the assembly is loaded. 
    /// 
-   /// If there is an existing IExtensionApplication, the call 
-   /// to the Singleton<T>Initialize() method below can be placed 
-   /// in the existing IExtensionApplication's Initlialize() 
-   /// method, and this class can be omitted.
+   /// If there is an existing IExtensionApplication, the 
+   /// call to the Singleton<T>.Enabled property shown below 
+   /// can be placed in the existing IExtensionApplication's 
+   /// Initlialize() method, and this class can be omitted.
    /// </summary>
 
    ///  public class MyApplication : IExtensionApplication
    ///  {
    ///     public void Initialize()
    ///     {
-   ///        SingletonManager<MyNoLockLayerOverrule>.Initlialize();
+   ///        Singleton<MyNoLockLayerOverrule>.Enabled = true;
    ///     }
    ///  
    ///     public void Terminate()
@@ -87,7 +89,8 @@ namespace AcMgdLib.Overrules
    }
 }
 
-/// Utility and helper classes used by the above code:
+/// Bundled Utility and helper classes used by the above code
+
 namespace AcMdgLib.Common
 {
    /// <summary>
@@ -95,11 +98,11 @@ namespace AcMdgLib.Common
    /// on next Application.Idle event:
    /// </summary>
 
-   public class AsyncHelper
+   public class Async
    {
       private Action action;
 
-      AsyncHelper(Action action)
+      Async(Action action)
       {
          this.action = action;
          Application.Idle += idle;
@@ -127,7 +130,7 @@ namespace AcMdgLib.Common
 
       public static void OnIdle(Action action)
       {
-         new AsyncHelper(action);
+         new Async(action);
       }
    }
 
@@ -138,7 +141,7 @@ namespace AcMdgLib.Common
    /// </summary>
    /// <typeparam name="T">The type to be managed</typeparam>
 
-   public static class DisposableSingleton<T> where T : class, IDisposable, new()
+   public static class Singleton<T> where T : class, IDisposable, new()
    {
       static T instance = null;
 
@@ -180,7 +183,7 @@ namespace AcMdgLib.Common
             if(!async)
                layerManagerControl.UpdateLayerManager(true);
             else
-               AsyncHelper.OnIdle(() => layerManagerControl.UpdateLayerManager(true));
+               Async.OnIdle(() => layerManagerControl.UpdateLayerManager(true));
          }
       }
 
