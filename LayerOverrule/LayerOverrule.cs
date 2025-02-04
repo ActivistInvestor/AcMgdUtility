@@ -48,6 +48,24 @@ namespace AcMgdLib.Overrules
          return result;
       }
 
+      /// <summary>
+      /// This property can be set to the wildcard
+      /// pattern matching the names of layers that
+      /// are operated on.
+      /// </summary>
+      
+      public string LayerNamePattern
+      {
+         get => namePattern;
+         set
+         {
+            if(!string.IsNullOrWhiteSpace(value))
+               namePattern = value;
+            else
+               namePattern = "*";
+         }
+      }
+
       protected abstract void OnLayerModified(LayerTableRecord layer);
 
       protected override void Dispose(bool disposing)
