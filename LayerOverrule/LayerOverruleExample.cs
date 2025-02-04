@@ -6,7 +6,7 @@ namespace AcMgdLib.Overrules.Examples
 {
    /// <summary>
    /// Example showing how to use the LayerOverrule
-   /// base type (included below).
+   /// base type (included in LayerOverrule.cs).
    /// 
    /// This example prevents layers from being locked
    /// only if their name starts with "NOLOCK", which
